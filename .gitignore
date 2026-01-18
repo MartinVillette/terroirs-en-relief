@@ -1,0 +1,14 @@
+# Data files
+*.csv
+*.parquet
+*.json
+data/
+*.pkl
+*.h5
+*.hdf5
+
+# Python
+__pycache__/
+*.pyc
+env/
+.env/
