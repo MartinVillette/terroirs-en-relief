@@ -1,8 +1,7 @@
 # Data files
-*.csv
 *.parquet
 *.json
-data/
+data/raw
 *.pkl
 *.h5
 *.hdf5
