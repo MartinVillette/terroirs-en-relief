@@ -2,193 +2,110 @@ import geopandas as gpd
 import pandas as pd
 import os
 
-# Configuration
+# --- CONFIGURATION ---
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RAW_DATA_DIR = os.path.join(BASE_DIR, "data", "raw")
 PROCESSED_DATA_DIR = os.path.join(BASE_DIR, "data", "processed")
 
-SHAPEFILE_DIR = os.path.join(RAW_DATA_DIR, "RPG_2-2__SHP_LAMB93_R44_2023-01-01")
-SHAPEFILE_PATH = os.path.join(SHAPEFILE_DIR, "PARCELLES_GRAPHIQUES.shp")
 PARQUET_PATH = os.path.join(RAW_DATA_DIR, "RPG2023_sol_climat.parquet")
-PRODUCTION_PATH = os.path.join(PROCESSED_DATA_DIR, "production_alsace.csv")
-OUTPUT_PATH = os.path.join(PROCESSED_DATA_DIR, "vignes.geojson")
+SHAPEFILE_AOC_DIR = os.path.join(RAW_DATA_DIR, "2026-01-06-delim-parcellaire-aoc-shp")
+SHAPEFILE_AOC = os.path.join(SHAPEFILE_AOC_DIR, "2026-01-06_delim-parcellaire-aoc-shp.shp")
 
 os.makedirs(PROCESSED_DATA_DIR, exist_ok=True)
 
-# Load data
-print("Loading shapefile...")
-geom = gpd.read_file(SHAPEFILE_PATH)
-print(f"  {len(geom)} parcels loaded")
+# ==============================================================================
+# ÉTAPE 1 : PRÉPARATION SPATIALE (IDENTIFICATION DES VIGNES)
+# ==============================================================================
+print("1. Chargement et Nettoyage des données...")
 
-print("Loading topographic data...")
-topo = pd.read_parquet(PARQUET_PATH)
-print(f"  {len(topo)} parcels loaded")
-
-# Merge
-print("Merging datasets...")
-merged = geom.merge(topo, left_on='ID_PARCEL', right_on='id_parcel', how='inner')
-print(f"  {len(merged)} parcels after merge")
-
-# Filter vineyards
-print("Filtering vineyards...")
-vignes = merged[merged['CODE_CULTU'].isin(['VRC', 'VRT'])].copy()
-print(f"  {len(vignes)} vineyard parcels")
-
-# Filter Alsace
-print("Filtering Alsace region...")
-vignes = vignes[vignes['dep_parc'].isin(['67', '68'])].copy()
-print(f"  {len(vignes)} parcels in Alsace")
-
-# Filter Route des Vins communes
-ROUTE_DES_VINS = [
-    '67003', '67032', '67084', '67372', '67482', '67210',
-    '68004', '68066', '68112', '68162', '68228', '68237',
-    '68338', '68340', '68350', '68376'
-]
-
-vignes_route = vignes[vignes['com_parc'].isin(ROUTE_DES_VINS)].copy()
-
-if len(vignes_route) > 0:
-    vignes = vignes_route
-    print(f"  {len(vignes)} parcels on Route des Vins")
+# A. Chargement AOC (Le Filtre)
+aoc_gdf = gpd.read_file(SHAPEFILE_AOC)
+col_nom_aoc = 'app' # Nom de l'appellation
+aoc_gdf = aoc_gdf[[col_nom_aoc, 'geometry']]
+if aoc_gdf.crs is None:
+    aoc_gdf.set_crs("EPSG:2154", inplace=True)
 else:
-    print("  WARNING: No parcels on Route des Vins, keeping all Alsace")
+    aoc_gdf = aoc_gdf.to_crs("EPSG:2154")
 
-# Stratified sampling
-MAX_PARCELLES = 10000
+# B. Chargement Parquet (Les Terrains)
+df_topo = pd.read_parquet(PARQUET_PATH)
 
-if len(vignes) > MAX_PARCELLES:
-    print(f"Sampling {len(vignes)} -> {MAX_PARCELLES} parcels...")
-    
-    parcelles_par_commune = vignes.groupby('com_parc').size()
-    proportion = MAX_PARCELLES / len(vignes)
-    
-    vignes_echantillonnees = []
-    for commune, count in parcelles_par_commune.items():
-        nb_a_garder = max(5, int(count * proportion))
-        parcelles_commune = vignes[vignes['com_parc'] == commune]
-        
-        if len(parcelles_commune) > nb_a_garder:
-            n_steep = max(2, int(nb_a_garder * 0.4))
-            n_random = nb_a_garder - n_steep
-            
-            sorted_parcels = parcelles_commune.sort_values('pente_mean', ascending=False)
-            steep = sorted_parcels.head(n_steep)
-            remaining = sorted_parcels.iloc[n_steep:]
-            random_parcels = remaining.sample(n=min(n_random, len(remaining)), random_state=42)
-            
-            vignes_echantillonnees.append(pd.concat([steep, random_parcels]))
-        else:
-            vignes_echantillonnees.append(parcelles_commune)
-    
-    vignes = pd.concat(vignes_echantillonnees).reset_index(drop=True)
-    print(f"  {len(vignes)} parcels selected")
+# Conversion Coordonnées (Hectomètres -> Mètres)
+# On garde 'dep_parc' pour l'agrégation départementale !
+df_points = df_topo[['mf_lambx', 'mf_lamby', 'pente_mean', 'alt_mean', 'expo_mean', 'id_parcel', 'dep_parc']].copy()
+df_points['x_reel'] = df_points['mf_lambx'] * 100
+df_points['y_reel'] = df_points['mf_lamby'] * 100
 
-# Add commune names
-COMMUNES_ALSACE = {
-    '67003': 'Andlau', '67032': 'Barr', '67084': 'Dambach-la-Ville',
-    '67210': 'Obernai', '67372': 'Mittelbergheim', '67482': 'Rosheim',
-    '68004': 'Ammerschwihr', '68066': 'Bergheim', '68112': 'Eguisheim',
-    '68162': 'Hunawihr', '68228': 'Kaysersberg', '68237': 'Mittelwihr',
-    '68338': 'Turckheim', '68340': 'Riquewihr', '68350': 'Ribeauvillé',
-    '68376': 'Sigolsheim',
-}
+# Création Géométrie (Lambert II -> Lambert 93)
+points_gdf = gpd.GeoDataFrame(
+    df_points, 
+    geometry=gpd.points_from_xy(df_points.x_reel, df_points.y_reel),
+    crs="EPSG:27572" 
+).to_crs("EPSG:2154")
 
-vignes['nom_commune'] = vignes['com_parc'].map(COMMUNES_ALSACE).fillna(vignes['com_parc'])
+print("2. Jointure Spatiale (On ne garde que ce qui est dans une AOC)...")
+# C'est ici qu'on filtre : tout ce qui n'est pas dans une AOC est supprimé.
+vignes_in_aoc = gpd.sjoin(points_gdf, aoc_gdf, how="inner", predicate="within")
 
-# Add appellations
-APPELLATIONS_ALSACE = {
-    'Andlau': 'Alsace Grand Cru Wiebelsberg',
-    'Barr': 'Alsace Grand Cru Kirchberg de Barr',
-    'Dambach-la-Ville': 'Alsace Grand Cru Frankstein',
-    'Mittelbergheim': 'Alsace Grand Cru Zotzenberg',
-    'Rosheim': 'Alsace Grand Cru Engelberg',
-    'Ammerschwihr': 'Alsace Grand Cru Kaefferkopf',
-    'Bergheim': 'Alsace Grand Cru Altenberg de Bergheim',
-    'Eguisheim': 'Alsace Grand Cru Eichberg',
-    'Hunawihr': 'Alsace Grand Cru Rosacker',
-    'Kaysersberg': 'Alsace Grand Cru Schlossberg',
-    'Mittelwihr': 'Alsace Grand Cru Mandelberg',
-    'Riquewihr': 'Alsace Grand Cru Schoenenbourg',
-    'Ribeauvillé': 'Alsace Grand Cru Geisberg',
-    'Sigolsheim': 'Alsace Grand Cru Mambourg',
-    'Turckheim': 'Alsace Grand Cru Brand',
-    'Obernai': 'AOC Alsace',
-}
+print(f"   -> {len(vignes_in_aoc)} correspondances trouvées (Parcelles x Appellations).")
 
-vignes['appellation'] = vignes['nom_commune'].map(APPELLATIONS_ALSACE).fillna('AOC Alsace')
+# ==============================================================================
+# ÉTAPE 2 : EXPORT PAR APPELLATION
+# ==============================================================================
+print("-" * 30)
+print("3. GÉNÉRATION : PAR APPELLATION")
+print("-" * 30)
 
-nb_grands_crus = vignes['appellation'].str.contains('Grand Cru', na=False).sum()
-nb_aoc = (vignes['appellation'] == 'AOC Alsace').sum()
-print(f"  {nb_grands_crus} Grand Cru parcels, {nb_aoc} AOC Alsace parcels")
+# Ici, on garde les doublons (une parcelle peut être dans 2 AOC)
+df_app = vignes_in_aoc.groupby(col_nom_aoc).agg({
+    'pente_mean': 'mean',
+    'alt_mean': 'mean',
+    'expo_mean': 'mean',
+    'id_parcel': 'count'
+}).reset_index().rename(columns={
+    col_nom_aoc: 'appellation',
+    'pente_mean': 'pente',
+    'alt_mean': 'altitude',
+    'expo_mean': 'exposition',
+    'id_parcel': 'nb_parcelles'
+})
 
-# Add production data
-print("Integrating production data...")
-try:
-    if not os.path.exists(PRODUCTION_PATH):
-        raise FileNotFoundError
-    
-    production = pd.read_csv(PRODUCTION_PATH)
-    vignes = vignes.merge(production, left_on='nom_commune', right_on='commune', how='left')
-    
-    if 'commune' in vignes.columns:
-        vignes.drop(columns=['commune'], inplace=True)
-    
-    nb_avec_prod = vignes['volume_production_hl'].notna().sum()
-    print(f"  {nb_avec_prod}/{len(vignes)} parcels with production data")
+csv_app = os.path.join(PROCESSED_DATA_DIR, "topo_par_appellation.csv")
+df_app.to_csv(csv_app, index=False)
+print(f"   [OK] {csv_app}")
 
-except FileNotFoundError:
-    print("  WARNING: Production file not found, continuing without")
-    vignes['superficie_production_ha'] = None
-    vignes['volume_production_hl'] = None
-    vignes['rendement_moyen_hl_ha'] = None
+# ==============================================================================
+# ÉTAPE 3 : EXPORT PAR DÉPARTEMENT (UNIQUEMENT VIGNES)
+# ==============================================================================
+print("-" * 30)
+print("4. GÉNÉRATION : PAR DÉPARTEMENT (VIGNES UNIQUEMENT)")
+print("-" * 30)
 
-except Exception as e:
-    print(f"  ERROR: {e}")
-    vignes['superficie_production_ha'] = None
-    vignes['volume_production_hl'] = None
-    vignes['rendement_moyen_hl_ha'] = None
+# CRUCIAL : On dédoublonne ! 
+# Pour le département, une parcelle ne doit compter qu'une seule fois, 
+# même si elle produit 3 vins différents.
+vignes_uniques = vignes_in_aoc.drop_duplicates(subset='id_parcel')
 
-# Select columns
-colonnes_utiles = [
-    'geometry', 'CODE_CULTU', 'SURF_PARC',
-    'pente_mean', 'expo_mean', 'alt_mean',
-    'dep_parc', 'com_parc', 'nom_commune', 'appellation',
-    'superficie_production_ha', 'volume_production_hl', 'rendement_moyen_hl_ha'
-]
+print(f"   -> {len(vignes_uniques)} parcelles physiques uniques identifiées.")
 
-vignes = vignes[colonnes_utiles].copy()
+# Nettoyage Code Dept
+vignes_uniques['code_dep'] = vignes_uniques['dep_parc'].astype(str).str.zfill(2)
 
-# Reproject and simplify
-print("Reprojecting to WGS84...")
-vignes = vignes.to_crs("EPSG:4326")
+df_dep = vignes_uniques.groupby('code_dep').agg({
+    'pente_mean': 'mean',
+    'alt_mean': 'mean',
+    'expo_mean': 'mean',
+    'id_parcel': 'count'
+}).reset_index().rename(columns={
+    'pente_mean': 'pente',
+    'alt_mean': 'altitude',
+    'expo_mean': 'exposition',
+    'id_parcel': 'nb_parcelles_vignes'
+})
 
-print("Simplifying geometries...")
-vignes['geometry'] = vignes['geometry'].simplify(tolerance=0.0002, preserve_topology=True)
+csv_dep = os.path.join(PROCESSED_DATA_DIR, "topo_par_departement.csv")
+df_dep.to_csv(csv_dep, index=False)
+print(f"   [OK] {csv_dep}")
 
-# Export
-print(f"Exporting to {OUTPUT_PATH}...")
-vignes.to_file(OUTPUT_PATH, driver="GeoJSON")
-
-file_size_mb = os.path.getsize(OUTPUT_PATH) / (1024 * 1024)
-
-# Statistics
-print(f"\nFINAL STATISTICS:")
-print(f"  Parcels: {len(vignes)}")
-print(f"  Average slope: {vignes['pente_mean'].mean():.1f}%")
-print(f"  Average altitude: {vignes['alt_mean'].mean():.0f}m")
-print(f"  Communes: {vignes['nom_commune'].nunique()}")
-print(f"  File size: {file_size_mb:.2f} MB")
-
-app_stats = vignes.groupby('appellation').size().sort_values(ascending=False)
-print(f"\nAppellations:")
-for app, count in app_stats.head(5).items():
-    pct = count / len(vignes) * 100
-    print(f"  {app}: {count} ({pct:.1f}%)")
-
-if file_size_mb > 3:
-    print(f"\nWARNING: Large file ({file_size_mb:.1f} MB)")
-else:
-    print(f"\nOptimized for web ({file_size_mb:.1f} MB)")
-
-print("\nDone!")
+print("=" * 30)
+print("TRAITEMENT TERMINÉ")

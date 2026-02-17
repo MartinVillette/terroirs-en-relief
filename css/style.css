@@ -214,3 +214,53 @@ footer {
         grid-column: 1;
     }
 }
+
+/* ...existing code... */
+
+/* Tooltip enrichi */
+.tooltip {
+    position: absolute;
+    background: rgba(0, 0, 0, 0.9);
+    color: white;
+    padding: 12px;
+    border-radius: 8px;
+    pointer-events: none;
+    font-size: 0.85em;
+    line-height: 1.5;
+    z-index: 1000;
+    max-width: 280px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+
+.tooltip strong {
+    color: #ffd700;
+}
+
+.tooltip hr {
+    margin: 8px 0;
+    border: 0;
+    border-top: 1px solid rgba(255,255,255,0.3);
+}
+
+/* Boutons de contrôle carte */
+#reset-zoom,
+#fit-data {
+    padding: 10px 15px;
+    background: white;
+    border: 2px solid #667eea;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.9em;
+    color: #667eea;
+    transition: all 0.3s;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+}
+
+#reset-zoom:hover,
+#fit-data:hover {
+    background: #667eea;
+    color: white;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+}

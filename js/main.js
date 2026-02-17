@@ -1,17 +1,27 @@
-// Configuration
+// ============================================
+// CONFIGURATION
+// ============================================
 const CONFIG = {
     dataPath: 'data/processed/vignes.geojson',
     colors: {
         slope: d3.interpolateRdYlGn,
         altitude: d3.interpolateViridis,
         exposure: d3.interpolateRdYlBu
+    },
+    map: {
+        width: 900,
+        height: 700,
+        center: [7.5, 48.25],    // ✅ Centre ajusté
+        scale: 50000              // ✅ Zoom beaucoup plus fort (était 15000)
     }
 };
 
-// Variables globales
+// ============================================
+// VARIABLES GLOBALES
+// ============================================
 let vineyardData = null;
 let filteredData = null;
-let mapElements = null; // Pour stocker les éléments SVG
+let mapElements = null;
 let currentFilters = {
     department: 'none',
     slopeMin: 0,
@@ -24,30 +34,313 @@ let currentFilters = {
 // ============================================
 async function loadData() {
     try {
-        console.log('📂 Chargement des données...');
-        const data = await d3.json(CONFIG.dataPath);
-        vineyardData = data;
-        filteredData = data; // Initialisation
+        console.log('Chargement des données...');
+        vineyardData = await d3.json(CONFIG.dataPath);
+        console.log(`${vineyardData.features.length} parcelles chargées`);
         
-        console.log(`✅ ${data.features.length} parcelles chargées`);
+        filteredData = vineyardData;
         
-        // Initialiser les visualisations
+        initFilters();
         initMap();
         createCharts();
         updateStats();
-        initFilters(); // ✨ NOUVEAU
         
     } catch (error) {
-        console.error('❌ Erreur de chargement:', error);
-        d3.select('#stats-content').html(`
-            <p style="color: red;">❌ Erreur: Impossible de charger les données</p>
-            <p>Assurez-vous d'utiliser un serveur local</p>
+        console.error('Erreur de chargement:', error);
+        d3.select('main').html(`
+            <div style="text-align: center; padding: 50px; color: #e74c3c;">
+                <h2>Erreur de chargement des données</h2>
+                <p>Impossible de charger ${CONFIG.dataPath}</p>
+                <p>Détails: ${error.message}</p>
+            </div>
         `);
     }
 }
 
 // ============================================
-// ✨ NOUVEAU : SYSTÈME DE FILTRAGE
+// INITIALISATION DE LA CARTE
+// ============================================
+async function initMap() {
+    const { width, height, center, scale } = CONFIG.map;
+    
+    const svg = d3.select('#map')
+        .attr('width', width)
+        .attr('height', height);
+    
+    // Projection Mercator centrée sur l'Alsace
+    const projection = d3.geoMercator()
+        .center(center)
+        .scale(scale)
+        .translate([width / 2, height / 2]);
+    
+    const path = d3.geoPath().projection(projection);
+    
+    // Message initial
+    svg.append('text')
+        .attr('id', 'empty-map-message')
+        .attr('x', width / 2)
+        .attr('y', height / 2)
+        .attr('text-anchor', 'middle')
+        .style('font-size', '18px')
+        .style('fill', '#999')
+        .style('font-weight', 'bold')
+        .text('Sélectionnez un département pour afficher les parcelles');
+    
+    // Échelle de couleur pour la pente
+    const slopeExtent = d3.extent(vineyardData.features, d => d.properties.pente_mean);
+    const colorScale = d3.scaleSequential()
+        .domain(slopeExtent)
+        .interpolator(CONFIG.colors.slope);
+    
+    // Tooltip
+    const tooltip = d3.select('body').append('div')
+        .attr('class', 'tooltip')
+        .style('opacity', 0);
+    
+    // Layer des vignes
+    const g = svg.append('g')
+        .attr('id', 'vineyard-layer');
+    
+    // Zoom
+    const zoom = d3.zoom()
+        .scaleExtent([1, 50])
+        .on('zoom', (event) => {
+            g.attr('transform', event.transform);
+        });
+    
+    svg.call(zoom);
+    
+    // Stocker les éléments
+    mapElements = {
+        svg, g, path, colorScale, tooltip, zoom, projection
+    };
+    
+    // Dessiner les parcelles
+    updateMap();
+    
+    // Créer la légende
+    createLegend(colorScale, slopeExtent, 'Pente (%)');
+    
+    // Bouton reset zoom
+    d3.select('#map-container').append('button')
+        .attr('id', 'reset-zoom')
+        .style('position', 'absolute')
+        .style('top', '10px')
+        .style('right', '10px')
+        .text('Réinitialiser le zoom')
+        .on('click', () => {
+            svg.transition().duration(750).call(zoom.transform, d3.zoomIdentity);
+        });
+    
+    // Bouton centrer sur les données
+    d3.select('#map-container').append('button')
+        .attr('id', 'fit-data')
+        .style('position', 'absolute')
+        .style('top', '50px')
+        .style('right', '10px')
+        .text('Centrer sur les parcelles')
+        .on('click', fitToData);
+}
+
+// ============================================
+// MISE À JOUR DE LA CARTE
+// ============================================
+function updateMap() {
+    const { g, path, colorScale, tooltip } = mapElements;
+    
+    // Message si aucune donnée
+    if (!filteredData || filteredData.features.length === 0) {
+        d3.select('#empty-map-message').style('display', 'block');
+        g.selectAll('path').remove();
+        return;
+    }
+    
+    d3.select('#empty-map-message').style('display', 'none');
+
+    g.selectAll('path').remove();
+    
+    // Data join
+    const parcels = g.selectAll('path')
+        .data(filteredData.features, d => d.properties.ID_PARCEL);
+    
+    // Exit
+    parcels.exit()
+        .transition()
+        .duration(300)
+        .attr('opacity', 0)
+        .remove();
+    
+    // Enter
+    const parcelsEnter = parcels.enter()
+        .append('path')
+        .attr('class', 'vineyard-parcel')
+        .attr('d', path)
+        .attr('opacity', 0);
+    
+    // Update + Enter
+    parcels.merge(parcelsEnter)
+        .transition()
+        .duration(300)
+        .attr('d', path)
+        .attr('fill', d => {
+            const slope = d.properties.pente_mean;
+            return slope != null ? colorScale(slope) : '#ddd';
+        })
+        .attr('stroke', '#fff')
+        .attr('stroke-width', 0.5)
+        .attr('opacity', 0.9);
+    
+    // Interactions
+    g.selectAll('path')
+        .on('mouseover', function(event, d) {
+            d3.select(this)
+                .attr('stroke', '#222')
+                .attr('stroke-width', 2)
+                .attr('opacity', 1);
+            
+            const props = d.properties;
+            const communeName = props.nom_commune || props.com_parc || 'Inconnue';
+            const appellation = props.appellation || 'Non renseignée';
+            
+            // Données de production (si disponibles)
+            const hasProduction = props.volume_production_hl != null;
+            let productionHtml = '';
+            
+            if (hasProduction) {
+                productionHtml = `
+                    <hr style="margin: 8px 0; border: 0; border-top: 1px solid rgba(255,255,255,0.3);">
+                    <strong>Production (commune):</strong><br>
+                    Volume: ${props.volume_production_hl.toFixed(0)} hl<br>
+                    Surface: ${props.superficie_production_ha.toFixed(1)} ha<br>
+                    Rendement: ${props.rendement_moyen_hl_ha.toFixed(0)} hl/ha
+                `;
+            }
+            
+            tooltip.transition().duration(200).style('opacity', 1);
+            tooltip.html(`
+                <strong>${communeName}</strong><br>
+                <strong>Appellation:</strong> ${appellation}<br>
+                <strong>Département:</strong> ${props.dep_parc}<br>
+                <strong>Pente:</strong> ${props.pente_mean?.toFixed(1) || 'N/A'}%<br>
+                <strong>Exposition:</strong> ${props.expo_mean?.toFixed(0) || 'N/A'}°<br>
+                <strong>Altitude:</strong> ${props.alt_mean?.toFixed(0) || 'N/A'}m<br>
+                <strong>Surface parcelle:</strong> ${props.SURF_PARC?.toFixed(2) || 'N/A'} ha
+                ${productionHtml}
+            `)
+            .style('left', (event.pageX + 15) + 'px')
+            .style('top', (event.pageY - 28) + 'px');
+        })
+        .on('mouseout', function() {
+            d3.select(this)
+                .attr('stroke', '#fff')
+                .attr('stroke-width', 0.5)
+                .attr('opacity', 0.9);
+            tooltip.transition().duration(500).style('opacity', 0);
+        });
+
+    if (filteredData === vineyardData) {
+        // Premier chargement : centrer sur toutes les parcelles
+        setTimeout(fitToData, 100);
+    }
+}
+
+// ============================================
+// CENTRER LA VUE SUR LES DONNÉES
+// ============================================
+function fitToData() {
+    if (!filteredData || filteredData.features.length === 0) {
+        alert('Aucune parcelle à afficher. Sélectionnez un département.');
+        return;
+    }
+    
+    const { svg, projection, zoom } = mapElements;
+    const width = +svg.attr('width');
+    const height = +svg.attr('height');
+    
+    // Calculer les limites
+    const bounds = d3.geoBounds(filteredData);
+    const [[x0, y0], [x1, y1]] = bounds.map(projection);
+    
+    // Calculer le zoom et la translation
+    const dx = x1 - x0;
+    const dy = y1 - y0;
+    const x = (x0 + x1) / 2;
+    const y = (y0 + y1) / 2;
+    const scale = Math.min(40, 0.9 / Math.max(dx / width, dy / height));
+    const translate = [width / 2 - scale * x, height / 2 - scale * y];
+    
+    // Animer la transformation
+    svg.transition()
+        .duration(750)
+        .call(
+            zoom.transform,
+            d3.zoomIdentity.translate(translate[0], translate[1]).scale(scale)
+        );
+}
+
+// ============================================
+// CRÉATION DE LA LÉGENDE
+// ============================================
+function createLegend(colorScale, extent, label) {
+    const legendWidth = 300;
+    const legendHeight = 20;
+    
+    const legendSvg = d3.select('#legend')
+        .append('svg')
+        .attr('width', legendWidth + 60)
+        .attr('height', legendHeight + 40);
+    
+    // Gradient
+    const defs = legendSvg.append('defs');
+    const gradient = defs.append('linearGradient')
+        .attr('id', 'legend-gradient')
+        .attr('x1', '0%')
+        .attr('x2', '100%');
+    
+    const numStops = 10;
+    for (let i = 0; i <= numStops; i++) {
+        const offset = i / numStops;
+        const value = extent[0] + offset * (extent[1] - extent[0]);
+        gradient.append('stop')
+            .attr('offset', `${offset * 100}%`)
+            .attr('stop-color', colorScale(value));
+    }
+    
+    // Rectangle de la légende
+    legendSvg.append('rect')
+        .attr('x', 10)
+        .attr('y', 10)
+        .attr('width', legendWidth)
+        .attr('height', legendHeight)
+        .style('fill', 'url(#legend-gradient)')
+        .style('stroke', '#333')
+        .style('stroke-width', 1);
+    
+    // Axe
+    const legendScale = d3.scaleLinear()
+        .domain(extent)
+        .range([10, legendWidth + 10]);
+    
+    const legendAxis = d3.axisBottom(legendScale)
+        .ticks(5)
+        .tickFormat(d => d.toFixed(1));
+    
+    legendSvg.append('g')
+        .attr('transform', `translate(0, ${legendHeight + 10})`)
+        .call(legendAxis);
+    
+    // Label
+    legendSvg.append('text')
+        .attr('x', legendWidth / 2 + 10)
+        .attr('y', legendHeight + 40)
+        .attr('text-anchor', 'middle')
+        .style('font-size', '12px')
+        .style('font-weight', 'bold')
+        .text(label);
+}
+
+// ============================================
+// INITIALISATION DES FILTRES
 // ============================================
 function initFilters() {
     // Filtre département
@@ -80,374 +373,97 @@ function initFilters() {
     d3.select('#reset-filters').on('click', resetFilters);
 }
 
-function updateAltitudeLabel() {
-    const min = currentFilters.altitudeMin;
-    const max = currentFilters.altitudeMax;
-    d3.select('#alt-value').text(`${min}-${max}m`);
-}
-
+// ============================================
+// APPLICATION DES FILTRES
+// ============================================
 function applyFilters() {
-    console.log('🔍 Application des filtres...', currentFilters);
-    
-    // Filtrer les données
     filteredData = {
         type: 'FeatureCollection',
-        features: vineyardData.features.filter(f => {
-            const props = f.properties;
+        features: vineyardData.features.filter(feature => {
+            const props = feature.properties;
             
             // Filtre département
-            if (currentFilters.department !== 'all' && 
-                props.dep_parc !== currentFilters.department) {
+            if (currentFilters.department !== 'none' && props.dep_parc !== currentFilters.department) {
                 return false;
             }
             
             // Filtre pente
-            if (props.pente_mean < currentFilters.slopeMin) {
+            if (props.pente_mean != null && props.pente_mean < currentFilters.slopeMin) {
                 return false;
             }
             
             // Filtre altitude
-            if (props.alt_mean < currentFilters.altitudeMin || 
-                props.alt_mean > currentFilters.altitudeMax) {
-                return false;
+            if (props.alt_mean != null) {
+                if (props.alt_mean < currentFilters.altitudeMin || props.alt_mean > currentFilters.altitudeMax) {
+                    return false;
+                }
             }
             
             return true;
         })
     };
     
-    console.log(`✅ ${filteredData.features.length} parcelles après filtrage`);
-    
-    // Mettre à jour les visualisations
     updateMap();
-    updateCharts();
+    createCharts();
     updateStats();
 }
 
+// ============================================
+// RÉINITIALISATION DES FILTRES
+// ============================================
 function resetFilters() {
-    // Réinitialiser les valeurs
     currentFilters = {
-        department: 'all',
+        department: 'none',
         slopeMin: 0,
         altitudeMin: 0,
         altitudeMax: 500
     };
     
-    // Réinitialiser les contrôles
-    d3.select('#dept-filter').property('value', 'all');
+    d3.select('#dept-filter').property('value', 'none');
     d3.select('#slope-filter').property('value', 0);
+    d3.select('#slope-value').text('0%');
     d3.select('#altitude-min').property('value', 0);
     d3.select('#altitude-max').property('value', 500);
-    d3.select('#slope-value').text('0%');
-    d3.select('#alt-value').text('0-500m');
+    updateAltitudeLabel();
     
-    // Réappliquer
     applyFilters();
 }
 
 // ============================================
-// CARTE INTERACTIVE
+// MISE À JOUR LABEL ALTITUDE
 // ============================================
-
-async function initMap() {
-    const width = 900;
-    const height = 700;
-    
-    const svg = d3.select('#map')
-        .attr('width', width)
-        .attr('height', height);
-    
-    // ✨ CORRECTION : Charger le fond de carte
-    let alsaceBackground = null;
-    
-    try {
-        console.log('📍 Chargement du fond de carte Alsace...');
-        
-        // ✨ Utiliser les contours des départements depuis une source fiable
-        const alsaceUrl = 'https://france-geojson.gregoiredavid.fr/repo/departements/67-bas-rhin/departement-67-bas-rhin.geojson';
-        const hautRhinUrl = 'https://france-geojson.gregoiredavid.fr/repo/departements/68-haut-rhin/departement-68-haut-rhin.geojson';
-        
-        const [basRhin, hautRhin] = await Promise.all([
-            d3.json(alsaceUrl),
-            d3.json(hautRhinUrl)
-        ]);
-        
-        alsaceBackground = {
-            type: 'FeatureCollection',
-            features: [basRhin, hautRhin]
-        };
-        
-        console.log('✅ Fond de carte chargé');
-    } catch (error) {
-        console.warn('⚠️ Impossible de charger le fond, utilisation d\'un fallback');
-        alsaceBackground = null;
-    }
-    
-    // ✨ CORRECTION : Utiliser TOUTES les données vignes pour calculer la projection
-    const bounds = d3.geoBounds(vineyardData);
-    console.log('📏 Limites géographiques:', bounds);
-    
-    // Projection adaptée à l'Alsace
-    const projection = d3.geoMercator()
-        .center([7.45, 48.3]) // Centre de l'Alsace
-        .scale(15000) // ⬆️ Augmenter pour un zoom adapté
-        .translate([width / 2, height / 2]);
-    
-    const path = d3.geoPath().projection(projection);
-    
-    // Message initial
-    svg.append('text')
-        .attr('id', 'empty-map-message')
-        .attr('x', width / 2)
-        .attr('y', height / 2)
-        .attr('text-anchor', 'middle')
-        .style('font-size', '18px')
-        .style('fill', '#999')
-        .style('font-weight', 'bold')
-        .text('Sélectionnez un département pour afficher les parcelles');
-    
-    // Échelle de couleur
-    const slopeExtent = d3.extent(vineyardData.features, d => d.properties.pente_mean);
-    const colorScale = d3.scaleSequential()
-        .domain(slopeExtent)
-        .interpolator(d3.interpolateRdYlGn);
-    
-    // Tooltip
-    const tooltip = d3.select('body').append('div')
-        .attr('class', 'tooltip')
-        .style('opacity', 0);
-    
-    // ✨ Layer du fond de carte
-    const gBackground = svg.append('g')
-        .attr('id', 'background-layer');
-    
-    // Dessiner le fond de carte si disponible
-    if (alsaceBackground) {
-        gBackground.selectAll('path.department')
-            .data(alsaceBackground.features)
-            .join('path')
-            .attr('class', 'department')
-            .attr('d', path)
-            .attr('fill', '#f9f9f9')
-            .attr('stroke', '#aaa')
-            .attr('stroke-width', 2)
-            .attr('stroke-dasharray', '5,5') // Contour en pointillés
-            .attr('opacity', 0.5);
-    } else {
-        // ✨ Fallback : dessiner un rectangle englobant
-        const [[x0, y0], [x1, y1]] = bounds;
-        const bbox = {
-            type: 'Feature',
-            geometry: {
-                type: 'Polygon',
-                coordinates: [[
-                    [x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]
-                ]]
-            }
-        };
-        
-        gBackground.append('path')
-            .datum(bbox)
-            .attr('d', path)
-            .attr('fill', '#f9f9f9')
-            .attr('stroke', '#999')
-            .attr('stroke-width', 2);
-    }
-    
-    // Layer des vignes (au-dessus)
-    const g = svg.append('g')
-        .attr('id', 'vineyard-layer');
-    
-    // Zoom
-    const zoom = d3.zoom()
-        .scaleExtent([1, 50]) // ⬆️ Permettre plus de zoom
-        .on('zoom', (event) => {
-            gBackground.attr('transform', event.transform);
-            g.attr('transform', event.transform);
-        });
-    
-    svg.call(zoom);
-    
-    // Stocker les éléments
-    mapElements = {
-        svg, g, gBackground, path, colorScale, tooltip, zoom, projection
-    };
-    
-    // Dessiner initialement
-    updateMap();
-    
-    // Légende
-    createLegend(colorScale, slopeExtent, 'Pente (%)');
-    
-    // Bouton reset zoom
-    d3.select('#map-container').append('button')
-        .attr('id', 'reset-zoom')
-        .style('position', 'absolute')
-        .style('top', '10px')
-        .style('right', '10px')
-        .text('↻ Réinitialiser le zoom')
-        .on('click', () => {
-            svg.transition().duration(750).call(zoom.transform, d3.zoomIdentity);
-        });
-    
-    // ✨ NOUVEAU : Bouton "Centrer sur les parcelles"
-    d3.select('#map-container').append('button')
-        .attr('id', 'fit-data')
-        .style('position', 'absolute')
-        .style('top', '50px')
-        .style('right', '10px')
-        .text('🎯 Centrer sur les parcelles')
-        .on('click', fitToData);
-}
-
-// ✨ NOUVELLE FONCTION : Centrer la carte sur les parcelles visibles
-function fitToData() {
-    if (!filteredData || filteredData.features.length === 0) {
-        alert('Aucune parcelle à afficher. Sélectionnez un département d\'abord.');
-        return;
-    }
-    
-    const { svg, projection, zoom } = mapElements;
-    const width = +svg.attr('width');
-    const height = +svg.attr('height');
-    
-    // Calculer les limites des parcelles filtrées
-    const bounds = d3.geoBounds(filteredData);
-    const [[x0, y0], [x1, y1]] = bounds.map(projection);
-    
-    // Calculer le zoom et la translation nécessaires
-    const dx = x1 - x0;
-    const dy = y1 - y0;
-    const x = (x0 + x1) / 2;
-    const y = (y0 + y1) / 2;
-    const scale = Math.min(40, 0.9 / Math.max(dx / width, dy / height));
-    const translate = [width / 2 - scale * x, height / 2 - scale * y];
-    
-    // Appliquer la transformation
-    svg.transition()
-        .duration(750)
-        .call(
-            zoom.transform,
-            d3.zoomIdentity.translate(translate[0], translate[1]).scale(scale)
-        );
-}
-
-// Fonction pour créer une bbox de fallback
-function createBoundingBox() {
-    // Coordonnées approximatives de l'Alsace
-    return {
-        type: 'FeatureCollection',
-        features: [{
-            type: 'Feature',
-            geometry: {
-                type: 'Polygon',
-                coordinates: [[
-                    [6.8, 47.4], // Sud-Ouest
-                    [7.6, 47.4], // Sud-Est
-                    [7.6, 49.1], // Nord-Est
-                    [6.8, 49.1], // Nord-Ouest
-                    [6.8, 47.4]  // Fermeture
-                ]]
-            }
-        }]
-    };
-}
-
-// Mettre à jour la carte avec les données filtrées
-function updateMap() {
-    const { g, path, colorScale, tooltip } = mapElements;
-    
-    // Mise à jour des parcelles
-    const parcels = g.selectAll('path')
-        .data(filteredData.features, d => d.properties.ID_PARCEL); // Key function
-    
-    // Supprimer les parcelles filtrées
-    parcels.exit()
-        .transition()
-        .duration(300)
-        .attr('opacity', 0)
-        .remove();
-    
-    // Ajouter les nouvelles
-    const parcelsEnter = parcels.enter()
-        .append('path')
-        .attr('class', 'vineyard-parcel')
-        .attr('d', path)
-        .attr('opacity', 0);
-    
-    // Mettre à jour toutes les parcelles
-    parcels.merge(parcelsEnter)
-        .transition()
-        .duration(300)
-        .attr('d', path)
-        .attr('fill', d => {
-            const slope = d.properties.pente_mean;
-            return slope != null ? colorScale(slope) : '#ddd';
-        })
-        .attr('stroke', '#fff')
-        .attr('stroke-width', 0.5)
-        .attr('opacity', 0.9);
-    
-    // Events sur toutes les parcelles
-    g.selectAll('path')
-        .on('mouseover', function(event, d) {
-            d3.select(this)
-                .attr('stroke', '#222')
-                .attr('stroke-width', 2)
-                .attr('opacity', 1);
-            
-            const communeName = d.properties.nom_commune || d.properties.com_parc || 'N/A';
-            
-            tooltip.transition().duration(200).style('opacity', 1);
-            tooltip.html(`
-                <strong>📍 ${communeName}</strong><br>
-                <strong>Dép:</strong> ${d.properties.dep_parc}<br>
-                <strong>📐 Pente:</strong> ${d.properties.pente_mean?.toFixed(1)}%<br>
-                <strong>🧭 Exposition:</strong> ${d.properties.expo_mean?.toFixed(0)}°<br>
-                <strong>⛰️ Altitude:</strong> ${d.properties.alt_mean?.toFixed(0)}m<br>
-                <strong>📏 Surface:</strong> ${d.properties.SURF_PARC?.toFixed(2)} ha
-            `)
-            .style('left', (event.pageX + 15) + 'px')
-            .style('top', (event.pageY - 28) + 'px');
-        })
-        .on('mouseout', function() {
-            d3.select(this)
-                .attr('stroke', '#fff')
-                .attr('stroke-width', 0.5)
-                .attr('opacity', 0.9);
-            tooltip.transition().duration(500).style('opacity', 0);
-        });
+function updateAltitudeLabel() {
+    const min = d3.select('#altitude-min').property('value');
+    const max = d3.select('#altitude-max').property('value');
+    d3.select('#altitude-value').text(`${min}m - ${max}m`);
 }
 
 // ============================================
-// GRAPHIQUES
+// CRÉATION DES GRAPHIQUES
 // ============================================
 function createCharts() {
     createHistogram('#slope-chart', 'pente_mean', 'Pente (%)', 20);
     createHistogram('#altitude-chart', 'alt_mean', 'Altitude (m)', 20);
 }
 
-// ✨ NOUVEAU : Mettre à jour les graphiques
-function updateCharts() {
-    d3.select('#slope-chart').selectAll('*').remove();
-    d3.select('#altitude-chart').selectAll('*').remove();
+// ============================================
+// HISTOGRAMME GÉNÉRIQUE
+// ============================================
+function createHistogram(selector, property, label, numBins) {
+    const width = 450;
+    const height = 300;
+    const margin = { top: 20, right: 20, bottom: 60, left: 60 };
     
-    createHistogram('#slope-chart', 'pente_mean', 'Pente (%)', 20);
-    createHistogram('#altitude-chart', 'alt_mean', 'Altitude (m)', 20);
-}
-
-function createHistogram(selector, property, label, bins) {
-    const width = 350;
-    const height = 180;
-    const margin = { top: 20, right: 20, bottom: 40, left: 50 };
+    d3.select(selector).selectAll('*').remove();
     
     const svg = d3.select(selector)
+        .append('svg')
         .attr('width', width)
         .attr('height', height);
     
-    // ✨ Utiliser filteredData au lieu de vineyardData
+    // Données
     const values = filteredData.features
-        .map(d => d.properties[property])
+        .map(f => f.properties[property])
         .filter(v => v != null);
     
     if (values.length === 0) {
@@ -455,102 +471,74 @@ function createHistogram(selector, property, label, bins) {
             .attr('x', width / 2)
             .attr('y', height / 2)
             .attr('text-anchor', 'middle')
-            .text('Aucune donnée');
+            .style('fill', '#999')
+            .text('Aucune donnée disponible');
         return;
     }
     
-    // ...existing code (reste du code de createHistogram)...
+    // Histogramme
     const x = d3.scaleLinear()
         .domain(d3.extent(values))
         .range([margin.left, width - margin.right]);
     
-    const histogram = d3.histogram()
+    const bins = d3.histogram()
         .domain(x.domain())
-        .thresholds(bins);
-    
-    const binData = histogram(values);
+        .thresholds(numBins)(values);
     
     const y = d3.scaleLinear()
-        .domain([0, d3.max(binData, d => d.length)])
+        .domain([0, d3.max(bins, d => d.length)])
         .range([height - margin.bottom, margin.top]);
     
+    // Barres
     svg.selectAll('rect')
-        .data(binData)
+        .data(bins)
         .join('rect')
         .attr('x', d => x(d.x0) + 1)
-        .attr('width', d => Math.max(0, x(d.x1) - x(d.x0) - 2))
         .attr('y', d => y(d.length))
+        .attr('width', d => Math.max(0, x(d.x1) - x(d.x0) - 2))
         .attr('height', d => y(0) - y(d.length))
-        .attr('fill', '#667eea');
+        .attr('fill', '#667eea')
+        .attr('opacity', 0.8);
     
+    // Axes
     svg.append('g')
         .attr('transform', `translate(0,${height - margin.bottom})`)
-        .call(d3.axisBottom(x).ticks(5));
+        .call(d3.axisBottom(x).ticks(8));
     
     svg.append('g')
         .attr('transform', `translate(${margin.left},0)`)
         .call(d3.axisLeft(y));
     
+    // Label X
     svg.append('text')
         .attr('x', width / 2)
-        .attr('y', height - 5)
+        .attr('y', height - 10)
         .attr('text-anchor', 'middle')
         .style('font-size', '12px')
         .text(label);
+    
+    // Label Y
+    svg.append('text')
+        .attr('transform', 'rotate(-90)')
+        .attr('x', -height / 2)
+        .attr('y', 15)
+        .attr('text-anchor', 'middle')
+        .style('font-size', '12px')
+        .text('Nombre de parcelles');
 }
 
 // ============================================
-// LÉGENDE
-// ============================================
-function createLegend(colorScale, extent, label) {
-    // ...existing code (inchangé)...
-    const legend = d3.select('#map-legend');
-    legend.html('');
-    
-    const legendSvg = legend.append('svg')
-        .attr('width', 300)
-        .attr('height', 60);
-    
-    const gradient = legendSvg.append('defs')
-        .append('linearGradient')
-        .attr('id', 'legend-gradient');
-    
-    gradient.selectAll('stop')
-        .data([0, 0.25, 0.5, 0.75, 1])
-        .join('stop')
-        .attr('offset', d => `${d * 100}%`)
-        .attr('stop-color', d => colorScale(extent[0] + d * (extent[1] - extent[0])));
-    
-    legendSvg.append('rect')
-        .attr('x', 10)
-        .attr('y', 10)
-        .attr('width', 200)
-        .attr('height', 20)
-        .style('fill', 'url(#legend-gradient)');
-    
-    legendSvg.append('text')
-        .attr('x', 10)
-        .attr('y', 45)
-        .text(`${extent[0].toFixed(1)}%`);
-    
-    legendSvg.append('text')
-        .attr('x', 180)
-        .attr('y', 45)
-        .text(`${extent[1].toFixed(1)}%`);
-    
-    legendSvg.append('text')
-        .attr('x', 220)
-        .attr('y', 25)
-        .style('font-weight', 'bold')
-        .text(label);
-}
-
-// ============================================
-// STATISTIQUES
+// MISE À JOUR DES STATISTIQUES
 // ============================================
 function updateStats() {
-    const features = filteredData.features; // ✨ Utiliser filteredData
+    const features = filteredData.features;
     
+    if (features.length === 0) {
+        d3.select('#stats-content').html('<p>Aucune parcelle sélectionnée</p>');
+        return;
+    }
+    
+    // Statistiques de base
     const stats = {
         count: features.length,
         avgSlope: d3.mean(features, d => d.properties.pente_mean),
@@ -558,11 +546,35 @@ function updateStats() {
         departments: [...new Set(features.map(d => d.properties.dep_parc))].join(', ')
     };
     
+    // Statistiques appellations
+    const appellations = features.reduce((acc, f) => {
+        const app = f.properties.appellation || 'Non renseignée';
+        acc[app] = (acc[app] || 0) + 1;
+        return acc;
+    }, {});
+    
+    const nbGrandsCrus = Object.entries(appellations)
+        .filter(([name, _]) => name.includes('Grand Cru'))
+        .reduce((sum, [_, count]) => sum + count, 0);
+    
+    // Statistiques production
+    const parcellesAvecProd = features.filter(f => f.properties.volume_production_hl != null);
+    const hasProdData = parcellesAvecProd.length > 0;
+    
+    let prodHtml = '';
+    if (hasProdData) {
+        const avgVol = d3.mean(parcellesAvecProd, d => d.properties.volume_production_hl);
+        prodHtml = `<p><strong>Production moyenne (commune):</strong> ${avgVol.toFixed(0)} hl</p>`;
+    }
+    
+    // Affichage
     d3.select('#stats-content').html(`
         <p><strong>Parcelles:</strong> ${stats.count.toLocaleString()}</p>
+        <p><strong>Grands Crus:</strong> ${nbGrandsCrus} (${(nbGrandsCrus/stats.count*100).toFixed(1)}%)</p>
         <p><strong>Pente moyenne:</strong> ${stats.avgSlope?.toFixed(1) || 'N/A'}%</p>
         <p><strong>Altitude moyenne:</strong> ${stats.avgAlt?.toFixed(0) || 'N/A'}m</p>
         <p><strong>Départements:</strong> ${stats.departments || 'N/A'}</p>
+        ${prodHtml}
     `);
 }
 

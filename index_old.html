@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>La Géométrie du Vin - Visualisation Interactive</title>
+    <link rel="stylesheet" href="css/style.css">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- En-tête -->
+        <header>
+            <h1>🍇 La Géométrie du Vin</h1>
+            <p class="subtitle">Exploration du relief viticole du Grand Est</p>
+        </header>
+
+        <!-- Dashboard principal -->
+        <main>
+            <!-- Carte interactive -->
+            <section id="map-section">
+                <h2>🗺️ Carte des parcelles viticoles</h2>
+                
+                <!-- ✨ NOUVEAU : Panneau de filtres -->
+                <div class="filters-panel">
+                    <div class="filter-group">
+                        <label for="dept-filter">📍 Département :</label>
+                        <select id="dept-filter">
+                            <option value="all">Tous</option>
+                            <option value="67">67 - Bas-Rhin</option>
+                            <option value="68">68 - Haut-Rhin</option>
+                        </select>
+                    </div>
+                    
+                    <div class="filter-group">
+                        <label for="slope-filter">📐 Pente minimale : <span id="slope-value">0%</span></label>
+                        <input type="range" id="slope-filter" min="0" max="35" value="0" step="1">
+                    </div>
+                    
+                    <div class="filter-group">
+                        <label for="altitude-filter">⛰️ Altitude : <span id="alt-value">0-500m</span></label>
+                        <input type="range" id="altitude-min" min="0" max="500" value="0" step="10">
+                        <input type="range" id="altitude-max" min="0" max="500" value="500" step="10">
+                    </div>
+                    
+                    <button id="reset-filters" class="btn-secondary">↻ Réinitialiser les filtres</button>
+                </div>
+                
+                <div class="map-instructions">
+                    <p>
+                        🖱️ <strong>Survolez</strong> une parcelle | 🔍 <strong>Molette</strong> pour zoomer<br>
+                        🎨 Couleur = Pente (🟢 Plat → 🟡 Modéré → 🔴 Forte)
+                    </p>
+                </div>
+                
+                <div id="map-container">
+                    <svg id="map"></svg>
+                </div>
+                <div id="map-legend"></div>
+            </section>
+
+            <!-- Histogrammes -->
+            <section id="charts-section">
+                <div class="chart-container">
+                    <h3>Distribution des pentes</h3>
+                    <svg id="slope-chart"></svg>
+                </div>
+                
+                <div class="chart-container">
+                    <h3>Distribution des altitudes</h3>
+                    <svg id="altitude-chart"></svg>
+                </div>
+
+                <div class="chart-container">
+                    <h3>Exposition dominante</h3>
+                    <svg id="exposure-chart"></svg>
+                </div>
+            </section>
+
+            <!-- Statistiques -->
+            <aside id="stats-panel">
+                <h3>📊 Statistiques</h3>
+                <div id="stats-content">
+                    <p>Chargement...</p>
+                </div>
+            </aside>
+        </main>
+
+        <!-- Footer -->
+        <footer>
+            <p>Données : RPG 2023 (IGN/INRAE) | Projet École Centrale Lyon 2026</p>
+        </footer>
+    </div>
+
+    <script src="js/main.js"></script>
+</body>
+</html>

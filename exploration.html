@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Exploration des Données - Vins & Géographie</title>
+    <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@observablehq/plot@0.6"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .nav-links {
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+        .nav-links a {
+            margin-right: 15px;
+            color: #1976d2;
+            text-decoration: none;
+            font-weight: 500;
+        }
+        .nav-links a:hover {
+            text-decoration: underline;
+        }
+        h2 {
+            color: #555;
+            margin-top: 40px;
+            margin-bottom: 20px;
+            padding-top: 20px;
+            border-top: 2px solid #e0e0e0;
+        }
+        .controls {
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: #f9f9f9;
+            border-radius: 4px;
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        label {
+            font-weight: 500;
+            color: #555;
+        }
+        select, input[type="text"], input[type="number"] {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        button {
+            padding: 8px 16px;
+            background-color: #1976d2;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        button:hover {
+            background-color: #1565c0;
+        }
+        button.secondary {
+            background-color: #757575;
+        }
+        button.secondary:hover {
+            background-color: #616161;
+        }
+        .table-container {
+            margin-top: 20px;
+            overflow-x: auto;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            max-height: 600px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+        thead {
+            background-color: #f5f5f5;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        th {
+            padding: 12px 8px;
+            text-align: left;
+            font-weight: 600;
+            color: #333;
+            border-bottom: 2px solid #ddd;
+            cursor: pointer;
+            user-select: none;
+            white-space: nowrap;
+        }
+        th:hover {
+            background-color: #e0e0e0;
+        }
+        th.sorted-asc::after {
+            content: " ▲";
+            color: #1976d2;
+        }
+        th.sorted-desc::after {
+            content: " ▼";
+            color: #1976d2;
+        }
+        td {
+            padding: 10px 8px;
+            border-bottom: 1px solid #eee;
+        }
+        tr:hover {
+            background-color: #f9f9f9;
+        }
+        tr.highlighted {
+            background-color: #fff3cd !important;
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        .stat-card {
+            background-color: #f9f9f9;
+            padding: 15px;
+            border-radius: 4px;
+            border-left: 4px solid #1976d2;
+        }
+        .stat-card h3 {
+            margin: 0 0 5px 0;
+            font-size: 14px;
+            color: #666;
+            font-weight: 500;
+        }
+        .stat-card .value {
+            font-size: 24px;
+            font-weight: 700;
+            color: #333;
+        }
+        .stat-card .unit {
+            font-size: 14px;
+            color: #666;
+            margin-left: 5px;
+        }
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        .export-btn {
+            background-color: #388e3c;
+        }
+        .export-btn:hover {
+            background-color: #2e7d32;
+        }
+        .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin-top: 20px;
+            padding: 15px;
+        }
+        .pagination button {
+            min-width: 80px;
+        }
+        .pagination span {
+            color: #666;
+        }
+        .num-right {
+            text-align: right;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="nav-links">
+            <a href="index.html">← Retour au Dashboard</a>
+        </div>
+
+        <h1>🔍 Exploration des Données - Vins & Géographie</h1>
+        <p style="color: #666; margin-bottom: 30px;">Explorez et filtrez les données de production vinicole, d'ensoleillement et de topographie par département.</p>
+
+        <!-- Statistics Summary -->
+        <div id="stats-summary"></div>
+
+        <!-- Combined Data Table -->
+        <h2>📊 Tableau de Données Complet</h2>
+        
+        <div class="controls">
+            <div class="control-group">
+                <label for="searchInput">🔎 Rechercher:</label>
+                <input type="text" id="searchInput" placeholder="Nom du département...">
+            </div>
+            
+            <div class="control-group">
+                <label for="filterProduction">Production min (hl):</label>
+                <input type="number" id="filterProduction" placeholder="0" min="0" step="1000">
+            </div>
+            
+            <div class="control-group">
+                <label for="filterSunshine">Ensoleillement min (h):</label>
+                <input type="number" id="filterSunshine" placeholder="0" min="0" step="100">
+            </div>
+
+            <div class="control-group">
+                <label for="filterSurface">Surface min (ha):</label>
+                <input type="number" id="filterSurface" placeholder="0" min="0" step="100">
+            </div>
+            
+            <button onclick="applyFilters()">Appliquer les filtres</button>
+            <button class="secondary" onclick="resetFilters()">Réinitialiser</button>
+            <button class="export-btn" onclick="exportToCSV()">📥 Exporter CSV</button>
+        </div>
+
+        <div class="table-container">
+            <table id="dataTable">
+                <thead>
+                    <tr>
+                        <th onclick="sortTable('code')">Code</th>
+                        <th onclick="sortTable('nom')">Département</th>
+                        <th onclick="sortTable('total_prod')" class="num-right">Prod. Totale (hl)</th>
+                        <th onclick="sortTable('total_rouge')" class="num-right">Rouge (hl)</th>
+                        <th onclick="sortTable('total_blanc')" class="num-right">Blanc (hl)</th>
+                        <th onclick="sortTable('total_rose')" class="num-right">Rosé (hl)</th>
+                        <th onclick="sortTable('surf_totale')" class="num-right">Surface (ha)</th>
+                        <th onclick="sortTable('nb_declarations')" class="num-right">Déclarations</th>
+                        <th onclick="sortTable('rendement')" class="num-right">Rendement (hl/ha)</th>
+                        <th onclick="sortTable('soleil')" class="num-right">Soleil (h/an)</th>
+                        <th onclick="sortTable('altitude')" class="num-right">Altitude (m)</th>
+                        <th onclick="sortTable('pente')" class="num-right">Pente (%)</th>
+                        <th onclick="sortTable('exposition')" class="num-right">Exposition (°)</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody">
+                    <tr><td colspan="13" class="loading">Chargement des données...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="pagination">
+            <button onclick="previousPage()">← Précédent</button>
+            <span id="pageInfo">Page 1</span>
+            <button onclick="nextPage()">Suivant →</button>
+            <div class="control-group" style="margin-left: 20px;">
+                <label for="rowsPerPageSelect">Lignes par page:</label>
+                <select id="rowsPerPageSelect" onchange="changeRowsPerPage()">
+                    <option value="10">10</option>
+                    <option value="25" selected>25</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Production Data Only -->
+        <h2>🍷 Données de Production par Département</h2>
+        <div class="table-container">
+            <table id="productionTable">
+                <thead>
+                    <tr>
+                        <th onclick="sortProductionTable('code_dept')">Code</th>
+                        <th onclick="sortProductionTable('nom_dept')">Département</th>
+                        <th onclick="sortProductionTable('total_prod')" class="num-right">Production Totale (hl)</th>
+                        <th onclick="sortProductionTable('total_rouge')" class="num-right">Vin Rouge (hl)</th>
+                        <th onclick="sortProductionTable('total_blanc')" class="num-right">Vin Blanc (hl)</th>
+                        <th onclick="sortProductionTable('total_rose')" class="num-right">Vin Rosé (hl)</th>
+                        <th onclick="sortProductionTable('surf_totale')" class="num-right">Surface Totale (ha)</th>
+                        <th onclick="sortProductionTable('surf_aop')" class="num-right">Surface AOP (ha)</th>
+                        <th onclick="sortProductionTable('surf_igp')" class="num-right">Surface IGP (ha)</th>
+                        <th onclick="sortProductionTable('nb_declarations')" class="num-right">Nb Déclarations</th>
+                    </tr>
+                </thead>
+                <tbody id="productionTableBody">
+                    <tr><td colspan="10" class="loading">Chargement...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Sunshine Data -->
+        <h2>☀️ Données d'Ensoleillement</h2>
+        <div class="table-container">
+            <table id="sunshineTable">
+                <thead>
+                    <tr>
+                        <th onclick="sortSunshineTable('code_dept')">Code</th>
+                        <th onclick="sortSunshineTable('nom_dept')">Département</th>
+                        <th onclick="sortSunshineTable('heures_soleil')" class="num-right">Heures d'ensoleillement (h/an)</th>
+                    </tr>
+                </thead>
+                <tbody id="sunshineTableBody">
+                    <tr><td colspan="3" class="loading">Chargement...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Topography Data -->
+        <h2>⛰️ Données Topographiques</h2>
+        <div class="table-container">
+            <table id="topoTable">
+                <thead>
+                    <tr>
+                        <th onclick="sortTopoTable('code_dep')">Code</th>
+                        <th onclick="sortTopoTable('altitude')" class="num-right">Altitude Moyenne (m)</th>
+                        <th onclick="sortTopoTable('pente')" class="num-right">Pente Moyenne (%)</th>
+                        <th onclick="sortTopoTable('exposition')" class="num-right">Exposition Moyenne (°)</th>
+                        <th onclick="sortTopoTable('nb_parcelles_vignes')" class="num-right">Nb Parcelles Vignes</th>
+                    </tr>
+                </thead>
+                <tbody id="topoTableBody">
+                    <tr><td colspan="5" class="loading">Chargement...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script src="js/exploration.js"></script>
+</body>
+</html>

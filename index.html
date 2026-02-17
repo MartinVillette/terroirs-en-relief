@@ -3,95 +3,134 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>La Géométrie du Vin - Visualisation Interactive</title>
-    <link rel="stylesheet" href="css/style.css">
-    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <title>Dashboard Production de Vins 2024</title>
+    <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@observablehq/plot@0.6"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .nav-links {
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+        .nav-links a {
+            margin-right: 15px;
+            color: #1976d2;
+            text-decoration: none;
+            font-weight: 500;
+        }
+        .nav-links a:hover {
+            text-decoration: underline;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        h2 {
+            color: #555;
+            margin-top: 40px;
+            margin-bottom: 20px;
+            padding-top: 20px;
+            border-top: 2px solid #e0e0e0;
+        }
+        .controls {
+            margin-bottom: 20px;
+        }
+        label {
+            margin-right: 10px;
+            font-weight: 500;
+        }
+        select {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        .dashboard-section {
+            margin-top: 20px;
+            margin-bottom: 40px;
+        }
+        .loading {
+            color: gray;
+            padding: 20px;
+            text-align: center;
+        }
+    </style>
 </head>
 <body>
     <div class="container">
-        <!-- En-tête -->
-        <header>
-            <h1>🍇 La Géométrie du Vin</h1>
-            <p class="subtitle">Exploration du relief viticole du Grand Est</p>
-        </header>
 
-        <!-- Dashboard principal -->
-        <main>
-            <!-- Carte interactive -->
-            <section id="map-section">
-                <h2>🗺️ Carte des parcelles viticoles</h2>
-                
-                <!-- ✨ NOUVEAU : Panneau de filtres -->
-                <div class="filters-panel">
-                    <div class="filter-group">
-                        <label for="dept-filter">📍 Département :</label>
-                        <select id="dept-filter">
-                            <option value="all">Tous</option>
-                            <option value="67">67 - Bas-Rhin</option>
-                            <option value="68">68 - Haut-Rhin</option>
-                        </select>
-                    </div>
-                    
-                    <div class="filter-group">
-                        <label for="slope-filter">📐 Pente minimale : <span id="slope-value">0%</span></label>
-                        <input type="range" id="slope-filter" min="0" max="35" value="0" step="1">
-                    </div>
-                    
-                    <div class="filter-group">
-                        <label for="altitude-filter">⛰️ Altitude : <span id="alt-value">0-500m</span></label>
-                        <input type="range" id="altitude-min" min="0" max="500" value="0" step="10">
-                        <input type="range" id="altitude-max" min="0" max="500" value="500" step="10">
-                    </div>
-                    
-                    <button id="reset-filters" class="btn-secondary">↻ Réinitialiser les filtres</button>
-                </div>
-                
-                <div class="map-instructions">
-                    <p>
-                        🖱️ <strong>Survolez</strong> une parcelle | 🔍 <strong>Molette</strong> pour zoomer<br>
-                        🎨 Couleur = Pente (🟢 Plat → 🟡 Modéré → 🔴 Forte)
-                    </p>
-                </div>
-                
-                <div id="map-container">
-                    <svg id="map"></svg>
-                </div>
-                <div id="map-legend"></div>
-            </section>
+        <div class="nav-links">
+            <a href="exploration.html">Explorer les données</a>
+        </div>
 
-            <!-- Histogrammes -->
-            <section id="charts-section">
-                <div class="chart-container">
-                    <h3>Distribution des pentes</h3>
-                    <svg id="slope-chart"></svg>
-                </div>
-                
-                <div class="chart-container">
-                    <h3>Distribution des altitudes</h3>
-                    <svg id="altitude-chart"></svg>
-                </div>
+        <h1>Dashboard Vins & Géographie - France 2024</h1>
+        
+        <!-- Production Dashboard -->
+        <h2>📊 Production de Vins</h2>
+        <div class="controls">
+            <label for="wineType">Type de vin :</label>
+            <select id="wineType">
+                <option value="total_prod">Production Totale</option>
+                <option value="total_rouge">Vin Rouge</option>
+                <option value="total_blanc">Vin Blanc</option>
+                <option value="total_rose">Vin Rosé</option>
+            </select>
+        </div>
+        <div id="production-dashboard" class="dashboard-section">
+            <div class="loading">Chargement des données de production...</div>
+        </div>
 
-                <div class="chart-container">
-                    <h3>Exposition dominante</h3>
-                    <svg id="exposure-chart"></svg>
-                </div>
-            </section>
+        <!-- Sunshine Dashboard -->
+        <h2>☀️ Ensoleillement</h2>
+        <div id="sunshine-dashboard" class="dashboard-section">
+            <div class="loading">Chargement des données d'ensoleillement...</div>
+        </div>
 
-            <!-- Statistiques -->
-            <aside id="stats-panel">
-                <h3>📊 Statistiques</h3>
-                <div id="stats-content">
-                    <p>Chargement...</p>
-                </div>
-            </aside>
-        </main>
+        <!-- Topography Dashboard -->
+        <h2>⛰️ Topographie</h2>
+        <div class="controls">
+            <label for="topoMetric">Métrique topographique :</label>
+            <select id="topoMetric">
+                <option value="altitude">Altitude</option>
+                <option value="pente">Pente</option>
+                <option value="exposition">Exposition</option>
+            </select>
+        </div>
+        <div id="topography-dashboard" class="dashboard-section">
+            <div class="loading">Chargement des données topographiques...</div>
+        </div>
 
-        <!-- Footer -->
-        <footer>
-            <p>Données : RPG 2023 (IGN/INRAE) | Projet École Centrale Lyon 2026</p>
-        </footer>
+        <!-- Impact Dashboard -->
+        <h2>📈 Impact sur le Rendement</h2>
+        <div class="controls">
+            <label for="impactFactor">Facteur d'analyse :</label>
+            <select id="impactFactor">
+                <option value="soleil">Ensoleillement</option>
+                <option value="altitude">Altitude</option>
+                <option value="pente">Pente</option>
+                <option value="exposition">Exposition</option>
+            </select>
+        </div>
+        <div id="impact-dashboard" class="dashboard-section">
+            <div class="loading">Chargement de l'analyse d'impact...</div>
+        </div>
     </div>
 
-    <script src="js/main.js"></script>
+    <script src="js/index.js"></script>
 </body>
 </html>
