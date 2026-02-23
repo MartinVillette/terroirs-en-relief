@@ -8,6 +8,75 @@ let choixVin = 'total_prod';
 let metricTopo = 'altitude';
 let facteurX = 'soleil';
 
+// Helper function to create color legend
+function createColorLegend(colorScale, domain, unit = "", width = 300) {
+    // 1. Sécurité : Vérifier que le domaine est valide pour éviter les NaN
+    const safeDomain = (isNaN(domain[0]) || isNaN(domain[1])) ? [0, 100] : domain;
+    
+    const margin = { top: 5, right: 20, bottom: 25, left: 20 };
+    const barHeight = 15;
+    const innerWidth = width - margin.left - margin.right;
+
+    // Création du conteneur
+    const container = d3.create("div").attr("class", "legend-container");
+    
+    const svg = container.append("svg")
+        .attr("width", width)
+        .attr("height", barHeight + margin.top + margin.bottom);
+
+    // 2. Définition du dégradé (Gradient)
+    const defs = svg.append("defs");
+    const gradientId = "gradient-" + Math.random().toString(36).substring(2, 9);
+    
+    const linearGradient = defs.append("linearGradient")
+        .attr("id", gradientId)
+        .attr("x1", "0%").attr("y1", "0%")
+        .attr("x2", "100%").attr("y2", "0%");
+
+    // On crée 10 points d'arrêt pour un dégradé fluide
+    const stops = 10;
+    for (let i = 0; i <= stops; i++) {
+        const offset = i / stops;
+        const value = safeDomain[0] + offset * (safeDomain[1] - safeDomain[0]);
+        linearGradient.append("stop")
+            .attr("offset", `${offset * 100}%`)
+            .attr("stop-color", colorScale(value));
+    }
+
+    const g = svg.append("g")
+        .attr("transform", `translate(${margin.left}, ${margin.top})`);
+
+    // 3. Dessin du rectangle
+    g.append("rect")
+        .attr("width", innerWidth)
+        .attr("height", barHeight)
+        .style("fill", `url(#${gradientId})`);
+
+    // 4. Création de l'axe (Valeurs)
+    const axisScale = d3.scaleLinear()
+        .domain(safeDomain)
+        .range([0, innerWidth]);
+
+    const axis = d3.axisBottom(axisScale)
+        .ticks(5)
+        .tickFormat(d => d3.format(".0s")(d) + unit); // Formatage compact (ex: 10k hl)
+
+    g.append("g")
+        .attr("transform", `translate(0, ${barHeight})`)
+        .call(axis)
+        .select(".domain").remove(); // On enlève la ligne de l'axe pour plus de clarté
+
+    return container.node(); // Retourne l'élément DOM prêt à être inséré
+}
+
+// Helper function to create tooltip
+function createTooltip() {
+    return d3.select("body")
+        .append("div")
+        .attr("class", "svg-tooltip")
+        .style("visibility", "hidden");
+}
+
 // Load all data
 async function loadData() {
     try {
@@ -62,6 +131,9 @@ function renderProductionDashboard() {
     const barColorBase = theme.color;
     const titleLabel = theme.label;
 
+    // Create tooltip
+    const tooltip = createTooltip();
+
     // Create SVG for map
     const svgMap = d3.create("svg")
         .attr("width", widthMap)
@@ -104,8 +176,14 @@ function renderProductionDashboard() {
             renderSunshineDashboard();
             renderTopographyDashboard();
         })
-        .on("mouseover", function() {
+        .on("mouseover", function(event, d) {
             d3.select(this).attr("stroke", "#333").attr("stroke-width", 2).raise();
+            tooltip.style("visibility", "visible")
+                .html(`<strong>${d.properties.nom}</strong><br/>${titleLabel} : <strong>${Math.round(d.properties.value).toLocaleString()} hl</strong>`);
+        })
+        .on("mousemove", function(event) {
+            tooltip.style("top", (event.pageY - 10) + "px")
+                .style("left", (event.pageX + 10) + "px");
         })
         .on("mouseout", function(e, d) {
             const isSel = d.properties.code === codeSelection;
@@ -114,9 +192,8 @@ function renderProductionDashboard() {
             if (!isSel && codeSelection) {
                 paths.filter(p => p.properties.code === codeSelection).raise();
             }
-        })
-        .append("title")
-        .text(d => `${d.properties.nom}\n${titleLabel} : ${Math.round(d.properties.value).toLocaleString()} hl`);
+            tooltip.style("visibility", "hidden");
+        });
 
     // Create bar chart
     const topData = [...dataProd]
@@ -157,17 +234,27 @@ function renderProductionDashboard() {
 
     const left = document.createElement("div");
     left.appendChild(svgMap.node());
+    
+    // Add color legend for map
+    const legend = createColorLegend(colorScaleMap, [0, maxVal], "hl", 300);
+    left.appendChild(legend);
 
     const right = document.createElement("div");
     right.appendChild(chart);
 
     div.appendChild(left);
     div.appendChild(right);
-
+    
+    // Add data source
+    const source = document.createElement("div");
+    source.className = "data-source";
+    source.textContent = "Source : Données de production viticole France 2024 (FranceAgriMer, Agreste)";
+    
     // Update container
     const dashboardContainer = document.getElementById('production-dashboard');
     dashboardContainer.innerHTML = '';
     dashboardContainer.appendChild(div);
+    dashboardContainer.appendChild(source);
 }
 
 // Render Sunshine Dashboard
@@ -185,6 +272,9 @@ function renderSunshineDashboard() {
 
     const selection = departementSelectionne;
     const codeSelection = selection ? selection.code : null;
+
+    // Create tooltip
+    const tooltip = createTooltip();
 
     // Create SVG for map
     const svgMap = d3.create("svg")
@@ -228,8 +318,14 @@ function renderSunshineDashboard() {
             renderSunshineDashboard();
             renderTopographyDashboard();
         })
-        .on("mouseover", function() {
+        .on("mouseover", function(event, d) {
             d3.select(this).attr("stroke", "#333").attr("stroke-width", 2).raise();
+            tooltip.style("visibility", "visible")
+                .html(`<strong>${d.properties.nom}</strong><br/>Ensoleillement : <strong>${Math.round(d.properties.value).toLocaleString()} h/an</strong>`);
+        })
+        .on("mousemove", function(event) {
+            tooltip.style("top", (event.pageY - 10) + "px")
+                .style("left", (event.pageX + 10) + "px");
         })
         .on("mouseout", function(e, d) {
             const isSel = d.properties.code === codeSelection;
@@ -238,9 +334,8 @@ function renderSunshineDashboard() {
             if (!isSel && codeSelection) {
                 paths.filter(p => p.properties.code === codeSelection).raise();
             }
-        })
-        .append("title")
-        .text(d => `${d.properties.nom}\nEnsoleillement : ${Math.round(d.properties.value).toLocaleString()} h/an`);
+            tooltip.style("visibility", "hidden");
+        });
 
     // Create bar chart
     const chart = Plot.plot({
@@ -288,17 +383,27 @@ function renderSunshineDashboard() {
 
     const left = document.createElement("div");
     left.appendChild(svgMap.node());
+    
+    // Add color legend for map
+    const legend = createColorLegend(colorScaleMap, [0, maxVal], " h/an", 300);
+    left.appendChild(legend);
 
     const right = document.createElement("div");
     right.appendChild(chart);
 
     div.appendChild(left);
     div.appendChild(right);
+    
+    // Add data source
+    const source = document.createElement("div");
+    source.className = "data-source";
+    source.textContent = "Source : Données météorologiques Météo-France 2024";
 
     // Update container
     const dashboardContainer = document.getElementById('sunshine-dashboard');
     dashboardContainer.innerHTML = '';
     dashboardContainer.appendChild(div);
+    dashboardContainer.appendChild(source);
 }
 
 // Render Topography Dashboard
@@ -317,6 +422,9 @@ function renderTopographyDashboard() {
     const selection = departementSelectionne;
     const codeSelection = selection ? selection.code : null;
     const metric = metricTopo;
+
+    // Create tooltip
+    const tooltip = createTooltip();
 
     // Create a map of department codes to names from GeoJSON
     const deptNamesMap = new Map();
@@ -406,8 +514,15 @@ function renderTopographyDashboard() {
             renderSunshineDashboard();
             renderTopographyDashboard();
         })
-        .on("mouseover", function() {
+        .on("mouseover", function(event, d) {
             d3.select(this).attr("stroke", "#333").attr("stroke-width", 2).raise();
+            const val = d.properties.value ? Math.round(d.properties.value * 10) / 10 : "N/A";
+            tooltip.style("visibility", "visible")
+                .html(`<strong>${d.properties.nom}</strong><br/>${metric.charAt(0).toUpperCase() + metric.slice(1)} : <strong>${val} ${unit}</strong>`);
+        })
+        .on("mousemove", function(event) {
+            tooltip.style("top", (event.pageY - 10) + "px")
+                .style("left", (event.pageX + 10) + "px");
         })
         .on("mouseout", function(e, d) {
             const isSel = d.properties.code === codeSelection;
@@ -416,11 +531,7 @@ function renderTopographyDashboard() {
             if (!isSel && codeSelection) {
                 paths.filter(p => p.properties.code === codeSelection).raise();
             }
-        })
-        .append("title")
-        .text(d => {
-            const val = d.properties.value ? Math.round(d.properties.value * 10) / 10 : "N/A";
-            return `${d.properties.nom}\n${metric.charAt(0).toUpperCase() + metric.slice(1)} : ${val} ${unit}`;
+            tooltip.style("visibility", "hidden");
         });
 
     // Create bar chart for topography
@@ -482,17 +593,27 @@ function renderTopographyDashboard() {
 
     const left = document.createElement("div");
     left.appendChild(svgMap.node());
+    
+    // Add color legend for map
+    const legend = createColorLegend(colorScale, [0, domainMax], unit, 300);
+    left.appendChild(legend);
 
     const right = document.createElement("div");
     right.appendChild(chart);
 
     div.appendChild(left);
     div.appendChild(right);
+    
+    // Add data source
+    const source = document.createElement("div");
+    source.className = "data-source";
+    source.textContent = "Source : Modèle Numérique de Terrain (IGN, BD ALTI)";
 
     // Update container
     const dashboardContainer = document.getElementById('topography-dashboard');
     dashboardContainer.innerHTML = '';
     dashboardContainer.appendChild(div);
+    dashboardContainer.appendChild(source);
 }
 
 // Render Impact Dashboard
@@ -510,6 +631,9 @@ function renderImpactDashboard() {
     const width = 850;
     const heightMap = 600;
     const heightPlot = 350;
+
+    // Create tooltip
+    const tooltip = createTooltip();
 
     // Préparation des données
     const topoMap = new Map(dataTopo.map(d => [String(d.code_dep).padStart(2, '0'), d]));
@@ -599,18 +723,24 @@ function renderImpactDashboard() {
             renderTopographyDashboard();
             renderImpactDashboard();
         })
-        .on("mouseover", function() { 
-            d3.select(this).attr("stroke", "#333").attr("stroke-width", 2.5).raise(); 
+        .on("mouseover", function(event, d) { 
+            d3.select(this).attr("stroke", "#333").attr("stroke-width", 2.5).raise();
+            const info = d.properties.info;
+            if (info) {
+                tooltip.style("visibility", "visible")
+                    .html(`<strong>${d.properties.nom}</strong><br/>Rendement: <strong>${Math.round(d.properties.value)} hl/ha</strong><br/>${labels[metric]}: <strong>${Math.round(info[metric])}</strong>`);
+            }
+        })
+        .on("mousemove", function(event) {
+            tooltip.style("top", (event.pageY - 10) + "px")
+                .style("left", (event.pageX + 10) + "px");
         })
         .on("mouseout", function(e, d) {
             const isSel = d.properties.code === codeSelection;
             d3.select(this).attr("stroke", isSel ? "#000" : "white").attr("stroke-width", isSel ? 2.5 : 0.5);
             if (!isSel && codeSelection) paths.filter(p => p.properties.code === codeSelection).raise();
-        })
-        .append("title")
-        .text(d => d.properties.info 
-            ? `${d.properties.nom}\nRendement: ${Math.round(d.properties.value)} hl/ha\n${metric}: ${Math.round(d.properties.info[metric])}`
-            : d.properties.nom);
+            tooltip.style("visibility", "hidden");
+        });
 
     svgMap.append("text")
         .attr("x", 20)
@@ -673,11 +803,24 @@ function renderImpactDashboard() {
 
     plotContainer.appendChild(scatterplot);
     container.appendChild(plotContainer);
+    
+    // Add color legend for the map
+    const mapLegendContainer = document.createElement("div");
+    mapLegendContainer.style.marginTop = "15px";
+    mapLegendContainer.style.marginBottom = "10px";
+    const mapLegend = createColorLegend(colorScale, [0, 100], " hl/ha", 400);
+    container.insertBefore(mapLegend, plotContainer);
+    
+    // Add data source
+    const source = document.createElement("div");
+    source.className = "data-source";
+    source.textContent = "Source : Combinaison des données de production viticole (FranceAgriMer), ensoleillement (Météo-France) et topographie (IGN)";
 
     // Update container
     const dashboardContainer = document.getElementById('impact-dashboard');
     dashboardContainer.innerHTML = '';
     dashboardContainer.appendChild(container);
+    dashboardContainer.appendChild(source);
 }
 
 // Event listeners
