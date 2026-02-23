@@ -385,43 +385,139 @@ function renderTopographyDashboard() {
     }
 
     const g = svgMap.append("g");
-    const paths = g.selectAll("path")
-        .data(geojson.features)
-        .join("path")
-        .attr("d", path)
-        .attr("fill", d => d.properties.value > 0 ? colorScale(d.properties.value) : "#eee")
-        .attr("stroke", "white")
-        .attr("stroke-width", 0.5)
-        .attr("cursor", "pointer");
 
-    paths.filter(d => d.properties.code === codeSelection)
-        .attr("stroke", "#000")
-        .attr("stroke-width", 2.5)
-        .raise();
+    if (metric === "exposition") {
+        // Draw departments as neutral grey fill
+        const paths = g.selectAll("path")
+            .data(geojson.features)
+            .join("path")
+            .attr("d", path)
+            .attr("fill", d => d.properties.value > 0 ? "#e8e0d0" : "#eee")
+            .attr("stroke", d => d.properties.code === codeSelection ? "#000" : "white")
+            .attr("stroke-width", d => d.properties.code === codeSelection ? 2.5 : 0.5)
+            .attr("cursor", "pointer")
+            .on("click", (event, d) => {
+                departementSelectionne = d.properties;
+                renderProductionDashboard();
+                renderSunshineDashboard();
+                renderTopographyDashboard();
+            })
+            .on("mouseover", function(e, d) {
+                if (d.properties.code === codeSelection) return;
+                d3.select(this)
+                    .attr("stroke", "#333")
+                    .attr("stroke-width", 1.5);
+            })
+            .on("mouseout", function(e, d) {
+                if (d.properties.code === codeSelection) return;
+                d3.select(this)
+                    .attr("stroke", "white")
+                    .attr("stroke-width", 0.5);
+            })
+        paths.filter(d => d.properties.code === codeSelection).raise();
 
-    paths
-        .on("click", (event, d) => {
-            departementSelectionne = d.properties;
-            renderProductionDashboard();
-            renderSunshineDashboard();
-            renderTopographyDashboard();
-        })
-        .on("mouseover", function() {
-            d3.select(this).attr("stroke", "#333").attr("stroke-width", 2).raise();
-        })
-        .on("mouseout", function(e, d) {
-            const isSel = d.properties.code === codeSelection;
-            d3.select(this).attr("stroke", isSel ? "#000" : "white")
-                .attr("stroke-width", isSel ? 2.5 : 0.5);
-            if (!isSel && codeSelection) {
-                paths.filter(p => p.properties.code === codeSelection).raise();
-            }
-        })
-        .append("title")
-        .text(d => {
-            const val = d.properties.value ? Math.round(d.properties.value * 10) / 10 : "N/A";
-            return `${d.properties.nom}\n${metric.charAt(0).toUpperCase() + metric.slice(1)} : ${val} ${unit}`;
+
+        // Draw arrows on each department centroid
+        geojson.features.forEach(feature => {
+            if (!feature.properties.value) return;
+
+            const centroid = path.centroid(feature);
+            if (isNaN(centroid[0]) || isNaN(centroid[1])) return;
+
+            const angleDeg = feature.properties.value;
+            // Convert exposition angle to SVG rotation
+            // 0° = North = up, clockwise
+            const angleRad = (angleDeg - 90) * Math.PI / 180;
+
+            const isSelected = feature.properties.code === codeSelection;
+            const arrowLen = isSelected ? 14 : 10;
+            const color = isSelected ? "#d32f2f" : "#555";
+            const strokeW = isSelected ? 2.5 : 1.5;
+
+            const arrowGroup = g.append("g")
+                .attr("class", "arrow-group")
+                .attr("transform", `translate(${centroid[0]}, ${centroid[1]})`)
+                .attr("cursor", "pointer")
+                .on("click", (event) => {
+                    departementSelectionne = feature.properties;
+                    renderProductionDashboard();
+                    renderSunshineDashboard();
+                    renderTopographyDashboard();
+                });
+
+
+            // Arrow shaft
+            const dx = Math.cos(angleRad) * arrowLen;
+            const dy = Math.sin(angleRad) * arrowLen;
+
+            arrowGroup.append("line")
+                .attr("x1", -dx * 0.4)
+                .attr("y1", -dy * 0.4)
+                .attr("x2", dx * 0.8)
+                .attr("y2", dy * 0.8)
+                .attr("stroke", color)
+                .attr("stroke-width", strokeW)
+                .attr("stroke-linecap", "round");
+
+            // Arrowhead
+            const headLen = arrowLen * 0.45;
+            const headAngle = 0.45;
+            const tipX = dx * 0.8;
+            const tipY = dy * 0.8;
+
+            const leftX = tipX - headLen * Math.cos(angleRad - headAngle);
+            const leftY = tipY - headLen * Math.sin(angleRad - headAngle);
+            const rightX = tipX - headLen * Math.cos(angleRad + headAngle);
+            const rightY = tipY - headLen * Math.sin(angleRad + headAngle);
+
+            arrowGroup.append("polygon")
+                .attr("points", `${tipX},${tipY} ${leftX},${leftY} ${rightX},${rightY}`)
+                .attr("fill", color);
+
+            // Tooltip
+            arrowGroup.append("title")
+                .text(`${feature.properties.nom}\nExposition : ${Math.round(angleDeg)}° (${expositionToCardinal(angleDeg)})`);
         });
+    }
+    else {    
+        const paths = g.selectAll("path")
+            .data(geojson.features)
+            .join("path")
+            .attr("d", path)
+            .attr("fill", d => d.properties.value > 0 ? colorScale(d.properties.value) : "#eee")
+            .attr("stroke", "white")
+            .attr("stroke-width", 0.5)
+            .attr("cursor", "pointer");
+
+        paths.filter(d => d.properties.code === codeSelection)
+            .attr("stroke", "#000")
+            .attr("stroke-width", 2.5)
+            .raise();
+
+        paths
+            .on("click", (event, d) => {
+                departementSelectionne = d.properties;
+                renderProductionDashboard();
+                renderSunshineDashboard();
+                renderTopographyDashboard();
+            })
+            .on("mouseover", function() {
+                d3.select(this).attr("stroke", "#333").attr("stroke-width", 2).raise();
+            })
+            .on("mouseout", function(e, d) {
+                const isSel = d.properties.code === codeSelection;
+                d3.select(this).attr("stroke", isSel ? "#000" : "white")
+                    .attr("stroke-width", isSel ? 2.5 : 0.5);
+                if (!isSel && codeSelection) {
+                    paths.filter(p => p.properties.code === codeSelection).raise();
+                }
+            })
+            .append("title")
+            .text(d => {
+                const val = d.properties.value ? Math.round(d.properties.value * 10) / 10 : "N/A";
+                return `${d.properties.nom}\n${metric.charAt(0).toUpperCase() + metric.slice(1)} : ${val} ${unit}`;
+            });
+    }
 
     // Create bar chart for topography
     const topData = enrichedDataTopo
@@ -429,50 +525,55 @@ function renderTopographyDashboard() {
         .sort((a, b) => d3.descending(a[metric], b[metric]))
         .slice(0, 15);
 
-    const chart = Plot.plot({
-        title: chartTitle,
-        marginLeft: 140,
-        width: widthChart,
-        height: heightChart,
-        x: {
-            label: unit,
-            grid: true,
-            tickFormat: "s"
-        },
-        y: {
-            label: null
-        },
-        marks: [
-            Plot.barX(topData, {
-                x: metric,
-                y: "nom_dept",
-                sort: { y: "x", reverse: true },
-                fill: d => {
-                    const codeCurrent = String(d.code_dep).padStart(2, '0');
-                    return codeCurrent === codeSelection ? "#222" : barColor;
-                },
-                title: d => `${d.nom_dept}\n${Math.round(d[metric] * 10) / 10} ${unit}`
-            }),
-            Plot.text(topData, {
-                x: metric,
-                y: "nom_dept",
-                text: d => {
-                    const val = d[metric];
-                    if (metric === "exposition") {
-                        return Math.round(val) + "°";
-                    } else if (metric === "altitude") {
-                        return Math.round(val) + "m";
-                    } else {
-                        return val.toFixed(1) + "%";
-                    }
-                },
-                textAnchor: "start",
-                dx: 5,
-                fill: "#666",
-                fontSize: 10
-            })
-        ]
-    });
+    let chart;
+    if (metric === "exposition") {
+        chart = renderExpositionRoseChart(enrichedDataTopo, codeSelection, widthChart, heightChart);
+    } else {
+        chart = Plot.plot({
+            title: chartTitle,
+            marginLeft: 140,
+            width: widthChart,
+            height: heightChart,
+            x: {
+                label: unit,
+                grid: true,
+                tickFormat: "s"
+            },
+            y: {
+                label: null
+            },
+            marks: [
+                Plot.barX(topData, {
+                    x: metric,
+                    y: "nom_dept",
+                    sort: { y: "x", reverse: true },
+                    fill: d => {
+                        const codeCurrent = String(d.code_dep).padStart(2, '0');
+                        return codeCurrent === codeSelection ? "#222" : barColor;
+                    },
+                    title: d => `${d.nom_dept}\n${Math.round(d[metric] * 10) / 10} ${unit}`
+                }),
+                Plot.text(topData, {
+                    x: metric,
+                    y: "nom_dept",
+                    text: d => {
+                        const val = d[metric];
+                        if (metric === "exposition") {
+                            return Math.round(val) + "°";
+                        } else if (metric === "altitude") {
+                            return Math.round(val) + "m";
+                        } else {
+                            return val.toFixed(1) + "%";
+                        }
+                    },
+                    textAnchor: "start",
+                    dx: 5,
+                    fill: "#666",
+                    fontSize: 10
+                })
+            ]
+        });
+    }
 
     // Assemble the dashboard
     const div = document.createElement("div");
@@ -495,6 +596,169 @@ function renderTopographyDashboard() {
     dashboardContainer.appendChild(div);
 }
 
+// Helper: convert degrees to cardinal direction
+function expositionToCardinal(deg) {
+    const dirs = ["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSO","SO","OSO","O","ONO","NO","NNO"];
+    const index = Math.round(deg / 22.5) % 16;
+    return dirs[index];
+}
+
+function renderExpositionRoseChart(data, codeSelection, width, height) {
+    const size = Math.min(width, height);
+    const cx = size / 2;
+    const cy = size / 2;
+    const radius = size / 2 - 40;
+
+    // Bin data into 10° ranges
+    const numBins = 36; // 360 / 10
+    const bins = Array.from({ length: numBins }, (_, i) => ({
+        angle: i * 10,           // start angle in degrees
+        angleMid: i * 10 + 5,    // midpoint of bin
+        count: 0,
+        departments: []
+    }));
+
+    data.forEach(d => {
+        if (d.exposition > 0) {
+            const binIndex = Math.floor(d.exposition / 10) % numBins;
+            bins[binIndex].count++;
+            bins[binIndex].departments.push(d);
+        }
+    });
+
+    const maxCount = d3.max(bins, d => d.count) || 1;
+
+    // SVG
+    const svg = d3.create("svg")
+        .attr("width", size)
+        .attr("height", size + 40) // extra space for title
+        .attr("viewBox", [0, 0, size, size + 40]);
+
+    // Title
+    svg.append("text")
+        .attr("x", cx)
+        .attr("y", 20)
+        .attr("text-anchor", "middle")
+        .attr("font-size", 14)
+        .attr("font-weight", "bold")
+        .attr("fill", "#333")
+        .text("Exposition des vignes (par tranche de 10°)");
+
+    const g = svg.append("g")
+        .attr("transform", `translate(${cx}, ${cy + 40})`);
+
+    // Background circles
+    const gridLevels = 4;
+    for (let i = 1; i <= gridLevels; i++) {
+        const r = (radius * i) / gridLevels;
+        g.append("circle")
+            .attr("r", r)
+            .attr("fill", "none")
+            .attr("stroke", "#ddd")
+            .attr("stroke-dasharray", "3,3");
+
+        // Count label on the grid
+        g.append("text")
+            .attr("x", 4)
+            .attr("y", -r + 4)
+            .attr("font-size", 10)
+            .attr("fill", "#aaa")
+            .text(Math.round((maxCount * i) / gridLevels));
+    }
+
+    // Cardinal direction lines
+    const directions = [
+        { angle: 0,   label: "N"  },
+        { angle: 45,  label: "NE" },
+        { angle: 90,  label: "E"  },
+        { angle: 135, label: "SE" },
+        { angle: 180, label: "S"  },
+        { angle: 225, label: "SO" },
+        { angle: 270, label: "O"  },
+        { angle: 315, label: "NO" }
+    ];
+
+    directions.forEach(({ angle, label }) => {
+        const rad = (angle - 90) * Math.PI / 180;
+        const x2 = Math.cos(rad) * radius;
+        const y2 = Math.sin(rad) * radius;
+        const lx = Math.cos(rad) * (radius + 20);
+        const ly = Math.sin(rad) * (radius + 20);
+
+        g.append("line")
+            .attr("x1", 0).attr("y1", 0)
+            .attr("x2", x2).attr("y2", y2)
+            .attr("stroke", "#ccc")
+            .attr("stroke-width", 0.5);
+
+        g.append("text")
+            .attr("x", lx)
+            .attr("y", ly)
+            .attr("text-anchor", "middle")
+            .attr("dominant-baseline", "middle")
+            .attr("font-size", 11)
+            .attr("font-weight", "bold")
+            .attr("fill", "#555")
+            .text(label);
+    });
+
+    // Draw petals
+    const angleStep = (2 * Math.PI) / numBins;
+
+    bins.forEach((bin, i) => {
+        if (bin.count === 0) return;
+
+        const r = (bin.count / maxCount) * radius;
+        // Offset by -90° so that 0° = North = top
+        const startAngle = (i * 10 - 90) * Math.PI / 180;
+        const endAngle = ((i + 1) * 10 - 90) * Math.PI / 180;
+
+        const x1 = Math.cos(startAngle) * r;
+        const y1 = Math.sin(startAngle) * r;
+        const x2 = Math.cos(endAngle) * r;
+        const y2 = Math.sin(endAngle) * r;
+
+        // Check if selected department is in this bin
+        const hasSelected = codeSelection && 
+            bin.departments.some(d => String(d.code_dep).padStart(2, '0') === codeSelection);
+
+        const petal = g.append("path")
+            .attr("d", `M 0 0 L ${x1} ${y1} A ${r} ${r} 0 0 1 ${x2} ${y2} Z`)
+            .attr("fill", hasSelected ? "#d32f2f" : "#f57c00")
+            .attr("fill-opacity", 0.75)
+            .attr("stroke", "white")
+            .attr("stroke-width", 0.5)
+            .attr("cursor", "pointer");
+
+        // Tooltip
+        const deptNames = bin.departments.map(d => d.nom_dept).join(", ");
+        petal.append("title")
+            .text(`${bin.angle}° - ${bin.angle + 10}°\n${bin.count} département(s)\n${deptNames}`);
+
+        // Hover interaction
+        petal
+            .on("mouseover", function() {
+                d3.select(this)
+                    .attr("fill-opacity", 1)
+                    .attr("stroke", "#333")
+                    .attr("stroke-width", 1.5);
+            })
+            .on("mouseout", function() {
+                d3.select(this)
+                    .attr("fill-opacity", 0.75)
+                    .attr("stroke", "white")
+                    .attr("stroke-width", 0.5);
+            });
+    });
+
+    // Center dot
+    g.append("circle")
+        .attr("r", 3)
+        .attr("fill", "#333");
+
+    return svg.node();
+}
+
 // Render Impact Dashboard
 function renderImpactDashboard() {
     if (!dataProd || !dataSoleil || !dataTopo || !departments) {
@@ -507,7 +771,7 @@ function renderImpactDashboard() {
     const codeSelection = selection ? selection.code : null;
     const metric = facteurX;
 
-    const width = 850;
+    const width = 1000;
     const heightMap = 600;
     const heightPlot = 350;
 
@@ -524,7 +788,7 @@ function renderImpactDashboard() {
         const production = d.total_prod || 0;
         
         // Calcul du Rendement (hl / ha)
-        const rendement = surface > 20 ? (production / surface) : 0; 
+        const rendement = surface > 0.1 ? (production / surface) : 0; 
         
         return {
             code: code,
