@@ -4,7 +4,7 @@ let dataSoleil = null;
 let dataTopo = null;
 let departments = null;
 let departementSelectionne = null;
-let choixVin = 'total_prod';
+let choixVin = 'total_aop';
 let metricTopo = 'altitude';
 let facteurX = 'soleil';
 
@@ -182,12 +182,12 @@ function renderProductionDashboard() {
     const metric = choixVin;
     const selection = departementSelectionne;
     const codeSelection = selection ? selection.code : null;
-
+    
     const themes = {
-        total_prod: { scale: d3.interpolatePuRd, color: "#8e24aa", label: "Production Totale" },
-        total_rouge: { scale: d3.interpolateReds, color: "#d32f2f", label: "Vin Rouge" },
-        total_blanc: { scale: d3.interpolateYlGn, color: "#9ccc65", label: "Vin Blanc" },
-        total_rose: { scale: d3.interpolateRdPu, color: "#f06292", label: "Vin Rosé" }
+        total_aop: { scale: d3.interpolatePuRd, color: "#8e24aa", label: "Production Totale AOP" },
+        aop_rouge: { scale: d3.interpolateReds, color: "#d32f2f", label: "Vin Rouge AOP" },
+        aop_blanc: { scale: d3.interpolateYlGn, color: "#9ccc65", label: "Vin Blanc AOP" },
+        aop_rose: { scale: d3.interpolateRdPu, color: "#f06292", label: "Vin Rosé AOP" }
     };
 
     const theme = themes[metric] || themes.total_prod;
@@ -969,7 +969,7 @@ function renderImpactDashboard() {
         const topoData = topoMap.get(code); 
         
         const surface = d.surf_totale || 0;
-        const production = d.total_prod || 0;
+        const production = d.total_aop || 0;
         
         // Calcul du Rendement (hl / ha)
         const rendement = surface > 20 ? (production / surface) : 0; 
