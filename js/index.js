@@ -8,6 +8,42 @@ let choixVin = 'total_aop';
 let metricTopo = 'altitude';
 let facteurX = 'soleil';
 
+// Mapping des principales AOP par département
+const aopParDepartement = {
+    "33": ["Bordeaux", "Bordeaux Supérieur", "Médoc", "Haut-Médoc", "Margaux", "Pauillac", "Saint-Estèphe", "Saint-Julien", "Pessac-Léognan", "Graves", "Sauternes", "Pomerol", "Saint-Émilion"],
+    "34": ["Languedoc", "Faugères", "Saint-Chinian", "Picpoul de Pinet"],
+    "11": ["Corbières", "Fitou", "Minervois", "Limoux"],
+    "51": ["Champagne"],
+    "10": ["Champagne"],
+    "02": ["Champagne"],
+    "21": ["Bourgogne", "Côte de Nuits", "Côte de Beaune", "Gevrey-Chambertin", "Pommard", "Meursault"],
+    "71": ["Mâcon", "Pouilly-Fuissé", "Saint-Véran"],
+    "69": ["Beaujolais", "Brouilly", "Morgon", "Fleurie", "Moulin-à-Vent"],
+    "13": ["Côtes de Provence", "Coteaux d'Aix-en-Provence", "Bandol", "Cassis"],
+    "83": ["Côtes de Provence", "Bandol"],
+    "84": ["Côtes du Rhône", "Châteauneuf-du-Pape", "Gigondas", "Vacqueyras"],
+    "30": ["Côtes du Rhône", "Costières de Nîmes"],
+    "26": ["Côtes du Rhône", "Crozes-Hermitage", "Hermitage", "Saint-Joseph"],
+    "07": ["Côtes du Rhône", "Saint-Joseph", "Cornas"],
+    "67": ["Alsace", "Alsace Grand Cru", "Crémant d'Alsace"],
+    "68": ["Alsace", "Alsace Grand Cru", "Crémant d'Alsace"],
+    "37": ["Vouvray", "Montlouis", "Chinon", "Bourgueil"],
+    "49": ["Anjou", "Saumur", "Saumur-Champigny", "Coteaux du Layon"],
+    "44": ["Muscadet", "Muscadet-Sèvre-et-Maine"],
+    "85": ["Fiefs Vendéens"],
+    "17": ["Cognac", "Pineau des Charentes"],
+    "16": ["Cognac", "Pineau des Charentes"],
+    "24": ["Bergerac", "Monbazillac", "Pécharmant"],
+    "47": ["Côtes du Marmandais", "Buzet"],
+    "32": ["Côtes de Gascogne", "Saint-Mont"],
+    "64": ["Jurançon", "Madiran", "Irouléguy"],
+    "66": ["Côtes du Roussillon", "Collioure", "Banyuls"],
+    "2A": ["Ajaccio"],
+    "2B": ["Patrimonio"],
+    "39": ["Côtes du Jura", "Arbois", "L'Étoile"],
+    "89": ["Chablis"],
+    "18": ["Sancerre", "Menetou-Salon", "Quincy"]
+};
 
 const tooltip = d3.select("body").append("div")
     .attr("id", "map-tooltip")
@@ -286,6 +322,32 @@ function renderProductionDashboard() {
         ]
     });
 
+    // Define info texts for each wine type
+    const infoTexts = {
+        total_aop: `L'<strong>Hérault</strong> cumule une grande production de rouge, blanc et rosé pour atteindre la première place du classement, tandis que la <strong>Gironde</strong> (Bordeaux) s'impose à la seconde place avec une production quasi-exclusive de vin rouge.`,
+        aop_rouge: `La <strong>Gironde</strong> est la région du Bordeaux, produisant les plus grands vins rouges français 
+            (Pauillac, Margaux, Saint-Émilion, Pomerol). Cette tradition séculaire en fait le leader incontesté du vin rouge.`,
+        aop_blanc: `La <strong>Marne</strong> (Champagne) et l'<strong>Hérault</strong> (Languedoc) dominent la production de vins blancs. 
+            La Marne produit les célèbres champagnes, tandis que l'Hérault bénéficie d'un climat méditerranéen idéal pour les blancs secs.`,
+        aop_rose: `Les <strong>Bouches-du-Rhône</strong> et le <strong>Var</strong> dominent la production de rosé, au cœur du bassin méditerranéen. 
+            L'<strong>AOC Côtes de Provence</strong> est la plus importante appellation de rosé au monde.`
+    };
+
+    // Add info bubble
+    const infoBubble = document.createElement("div");
+    infoBubble.style.backgroundColor = barColorBase + "15"; // 15 = opacity in hex (~8%)
+    infoBubble.style.border = `2px solid ${barColorBase}`;
+    infoBubble.style.borderRadius = "8px";
+    infoBubble.style.padding = "12px 16px";
+    infoBubble.style.marginBottom = "15px";
+    infoBubble.style.fontSize = "13px";
+    infoBubble.style.lineHeight = "1.5";
+    infoBubble.style.color = "#333";
+    infoBubble.innerHTML = `
+        <strong style="color: ${barColorBase};">💡 ${titleLabel}</strong><br/>
+        ${infoTexts[metric]}
+    `;
+
     // Assemble the dashboard
     const div = document.createElement("div");
     div.style.display = "flex";
@@ -300,6 +362,7 @@ function renderProductionDashboard() {
     appendMapSource(left, "Douane.gouv", "https://www.douane.gouv.fr/la-douane/opendata/mots-cles/recolte");
 
     const right = document.createElement("div");
+    right.appendChild(infoBubble);
     right.appendChild(chart);
 
     div.appendChild(left);
@@ -956,7 +1019,8 @@ function renderImpactDashboard() {
     const metric = facteurX;
 
     const width = 1000;
-    const heightMap = 600;
+    const widthMap = 460;
+    const heightMap = 500; 
     const heightPlot = 350;
 
     // Préparation des données
@@ -990,10 +1054,52 @@ function renderImpactDashboard() {
         };
     }).filter(d => d.rendement > 0 && d[metric] > 0); 
 
-    // Échelle de couleur pour le Rendement
-    const colorScale = d3.scaleSequential()
+    // Configuration des métriques
+    const metricConfigs = {
+        soleil: { 
+            interpolator: d3.interpolateYlOrRd,
+            label: "Ensoleillement",
+            unit: " h/an"
+        },
+        altitude: { 
+            interpolator: d3.interpolateGnBu,
+            label: "Altitude",
+            unit: " m"
+        },
+        pente: { 
+            interpolator: d3.interpolateReds,
+            label: "Pente",
+            unit: "%"
+        },
+        exposition: { 
+            interpolator: d3.interpolateYlOrBr,
+            label: "Exposition",
+            unit: "°"
+        }
+    };
+
+    const metricConfig = metricConfigs[metric];
+
+    const labels = {
+        soleil: "Ensoleillement (h/an)",
+        altitude: "Altitude Moyenne (m)",
+        pente: "Pente Moyenne (%)",
+        exposition: "Exposition Moyenne (°)"
+    };
+
+    // Échelles de couleur
+    const colorScaleRendement = d3.scaleSequential()
         .domain([0, 100])
         .interpolator(d3.interpolateYlGnBu);
+
+    const colorScaleFactor = d3.scaleSequential()
+        .domain([0, d3.max(combinedData, d => d[metric]) || 100])
+        .interpolator(metricConfig.interpolator);
+
+    // Classement des départements par rendement et par métrique
+    const rankedByRendement = [...combinedData].sort((a, b) => b.rendement - a.rendement);
+    const rankedByMetric = [...combinedData].sort((a, b) => b[metric] - a[metric]);
+    const totalDepts = combinedData.length;
 
     // Container
     const container = document.createElement("div");
@@ -1006,48 +1112,72 @@ function renderImpactDashboard() {
     title.style.paddingBottom = "10px";
     container.appendChild(title);
 
-    // Map wrapper
-    const mapDiv = document.createElement("div");
-    mapDiv.style.display = "flex";
-    mapDiv.style.flexDirection = "column";
-    mapDiv.style.width = "fit-content";
+    // Container pour les deux cartes côte à côte et l'encadré de synthèse
+    const mapsContainer = document.createElement("div");
+    mapsContainer.style.display = "flex";
+    mapsContainer.style.gap = "10px";
+    mapsContainer.style.marginTop = "20px";
+    mapsContainer.style.marginBottom = "30px";
+    mapsContainer.style.justifyContent = "center";
+    mapsContainer.style.alignItems = "flex-start";
 
-    // Carte
-    const svgMap = d3.create("svg")
-        .attr("width", width)
-        .attr("height", heightMap)
-        .attr("viewBox", [0, 0, width, heightMap]);
 
     const projection = d3.geoConicConformal()
         .center([2.454071, 46.279229])
         .scale(2800)
-        .translate([width / 2, heightMap / 2]);
+        .translate([widthMap / 2, heightMap / 2]);
     const path = d3.geoPath().projection(projection);
 
-    const geojson = JSON.parse(JSON.stringify(departments));
+    // Carte 1 : Rendement
 
-    for (const feature of geojson.features) {
-        const depCode = feature.properties.code;
+    const rendementMapContainer = document.createElement("div");
+    rendementMapContainer.style.flex = "1";
+    rendementMapContainer.style.minWidth = "0";  // Important pour éviter overflow
+    rendementMapContainer.style.display = "flex";
+    rendementMapContainer.style.flexDirection = "column";
+    
+    const rendementTitle = document.createElement("h4");
+    rendementTitle.textContent = "Rendement Viticole";
+    rendementTitle.style.textAlign = "center";
+    rendementTitle.style.color = "#555";
+    rendementTitle.style.margin = "0 0 5px 0";  // Réduit pour économiser l'espace
+    rendementTitle.style.fontSize = "0.95em";
+    rendementTitle.style.fontWeight = "600";
+    rendementMapContainer.appendChild(rendementTitle);
+
+    const svgRendement = d3.create("svg")
+        .attr("width", widthMap)
+        .attr("height", heightMap)
+        .attr("viewBox", [0, 0, widthMap, heightMap])
+        .style("flex", "0 0 auto");
+
+    const geojsonRendement = JSON.parse(JSON.stringify(departments));
+
+    for (const feature of geojsonRendement.features) {
+        const depCode = String(feature.properties.code).padStart(2, '0');
         const row = combinedData.find(c => c.code === depCode);
         feature.properties.value = row ? row.rendement : 0;
         feature.properties.info = row;
     }
 
-    const gMap = svgMap.append("g");
-    const paths = gMap.selectAll("path")
-        .data(geojson.features)
+    const gRendement = svgRendement.append("g");
+    const pathsRendement = gRendement.selectAll("path")
+        .data(geojsonRendement.features)
         .join("path")
         .attr("d", path)
-        .attr("fill", d => d.properties.value > 0 ? colorScale(d.properties.value) : "#eee")
+        .attr("fill", d => d.properties.value > 0 ? colorScaleRendement(d.properties.value) : "#eee")
         .attr("stroke", "white")
         .attr("stroke-width", 0.5)
         .attr("cursor", "pointer");
 
-    paths.filter(d => d.properties.code === codeSelection)
+    pathsRendement.filter(d => String(d.properties.code).padStart(2, '0') === codeSelection)
         .attr("stroke", "#000").attr("stroke-width", 2.5).raise();
 
-    paths.on("click", (e, d) => { 
-            departementSelectionne = d.properties;
+    pathsRendement.on("click", (e, d) => { 
+            departementSelectionne = {
+                code: String(d.properties.code).padStart(2, '0'),
+                nom: d.properties.nom
+            };
             renderProductionDashboard();
             renderSunshineDashboard();
             renderTopographyDashboard();
@@ -1060,7 +1190,7 @@ function renderImpactDashboard() {
                 showTooltip(e, `
                     <strong>${d.properties.nom}</strong><br>
                     Rendement : <strong>${Math.round(d.properties.value)} hl/ha</strong><br>
-                    ${labels[metric]} : <strong>${Math.round(info[metric])}</strong><br>
+                    ${metricConfig.label} : <strong>${Math.round(info[metric])} ${metricConfig.unit}</strong><br>
                     Surface : <strong>${Math.round(info.surface).toLocaleString()} ha</strong>
                 `);
             } else {
@@ -1069,34 +1199,205 @@ function renderImpactDashboard() {
         })
         .on("mousemove", moveTooltip)
         .on("mouseout", function(e, d) {
-            const isSel = d.properties.code === codeSelection;
+            const isSel = String(d.properties.code).padStart(2, '0') === codeSelection;
             d3.select(this).attr("stroke", isSel ? "#000" : "white")
                 .attr("stroke-width", isSel ? 2.5 : 0.5);
-            if (!isSel && codeSelection) paths.filter(p => p.properties.code === codeSelection).raise();
+            if (!isSel && codeSelection) pathsRendement.filter(p => String(p.properties.code).padStart(2, '0') === codeSelection).raise();
             hideTooltip();
         });
 
-    svgMap.append("text")
-        .attr("x", 20)
-        .attr("y", 30)
-        .text("Carte : Rendement Viticole (hl/ha)")
-        .style("font-weight", "bold");
-
+    rendementMapContainer.appendChild(svgRendement.node());
     
-    mapDiv.appendChild(svgMap.node());
-    appendMapLegend(mapDiv, colorScale, [0, 100], "Rendement (hl/ha)", d => Math.round(d) + " hl/ha");
-    container.appendChild(mapDiv);
+    appendMapLegend(
+        rendementMapContainer, 
+        colorScaleRendement, 
+        [0, d3.max(combinedData, d => d.rendement) || 100], 
+        "Rendement", 
+        d => Math.round(d) + " hl/ha");
 
+    // Carte 2 : Facteur selectionné
+
+    const factorMapContainer = document.createElement("div");
+    factorMapContainer.style.flex = "1";
+    factorMapContainer.style.minWidth = "0";  // Important pour éviter overflow
+    factorMapContainer.style.display = "flex";
+    factorMapContainer.style.flexDirection = "column";
+    
+    const factorTitle = document.createElement("h4");
+    factorTitle.textContent = metricConfig.label;  // Utiliser le vrai nom du facteur
+    factorTitle.style.textAlign = "center";
+    factorTitle.style.color = "#555";
+    factorTitle.style.margin = "0 0 5px 0";  // Réduit pour économiser l'espace
+    factorTitle.style.fontSize = "0.95em";
+    factorTitle.style.fontWeight = "600";
+    factorMapContainer.appendChild(factorTitle);
+
+    const svgFactor = d3.create("svg")
+        .attr("width", widthMap)
+        .attr("height", heightMap)
+        .style("flex", "0 0 auto")
+        .attr("viewBox", [0, 0, widthMap, heightMap]);
+
+    const geojsonFactor = JSON.parse(JSON.stringify(departments));
+
+    for (const feature of geojsonFactor.features) {
+        const depCode = String(feature.properties.code).padStart(2, '0');
+        const row = combinedData.find(c => c.code === depCode);
+        feature.properties.value = row ? row[metric] : 0;
+        feature.properties.info = row;
+    }
+
+    const gFactor = svgFactor.append("g");
+    const pathsFactor = gFactor.selectAll("path")
+        .data(geojsonFactor.features)
+        .join("path")
+        .attr("d", path)
+        .attr("fill", d => d.properties.value > 0 ? colorScaleFactor(d.properties.value) : "#eee")
+        .attr("stroke", "white")
+        .attr("stroke-width", 0.5)
+        .attr("cursor", "pointer");
+
+    pathsFactor.filter(d => String(d.properties.code).padStart(2, '0') === codeSelection)
+        .attr("stroke", "#000").attr("stroke-width", 2.5).raise();
+
+    pathsFactor.on("click", (e, d) => { 
+            departementSelectionne = {
+                code: String(d.properties.code).padStart(2, '0'),
+                nom: d.properties.nom
+            };
+            renderProductionDashboard();
+            renderSunshineDashboard();
+            renderTopographyDashboard();
+            renderImpactDashboard();
+        })
+        .on("mouseover", function(e, d) {
+            d3.select(this).attr("stroke", "#333").attr("stroke-width", 2.5).raise();
+            const info = d.properties.info;
+            if (info) {
+                showTooltip(e, `
+                    <strong>${d.properties.nom}</strong><br>
+                    Rendement : <strong>${Math.round(d.properties.value)} hl/ha</strong><br>
+                    ${metricConfig.label} : <strong>${Math.round(info[metric])} ${metricConfig.unit}</strong><br>
+                    Surface : <strong>${Math.round(info.surface).toLocaleString()} ha</strong>
+                `);
+            } else {
+                showTooltip(e, `<strong>${d.properties.nom}</strong><br><em>Données indisponibles</em>`);
+            }
+        })
+        .on("mousemove", moveTooltip)
+        .on("mouseout", function(e, d) {
+            const isSel = String(d.properties.code).padStart(2, '0') === codeSelection;
+            d3.select(this).attr("stroke", isSel ? "#000" : "white")
+                .attr("stroke-width", isSel ? 2.5 : 0.5);
+            if (!isSel && codeSelection) pathsFactor.filter(p => String(p.properties.code).padStart(2, '0') === codeSelection).raise();
+            hideTooltip();
+        });
+
+    factorMapContainer.appendChild(svgFactor.node());
+    
+    appendMapLegend(
+        factorMapContainer, 
+        colorScaleFactor, 
+        [0, d3.max(combinedData, d => d[metric]) || 100], 
+        metricConfig.label, 
+        d => Math.round(d) + " " + metricConfig.unit);
+
+// Encadré de synthèse
+    const summaryBox = document.createElement("div");
+    summaryBox.style.flex = "0 0 250px";
+    summaryBox.style.minHeight = "500px";
+    summaryBox.style.padding = "20px";
+    summaryBox.style.backgroundColor = "#f8f9fa";
+    summaryBox.style.border = "1px solid #ddd";
+    summaryBox.style.borderRadius = "8px";
+    summaryBox.style.boxShadow = "0 2px 4px rgba(0,0,0,0.05)";
+
+    if (codeSelection) {
+        const d = combinedData.find(c => c.code === codeSelection);
+        
+        if (!d) {
+            // Si le département n'existe pas dans les données combinées
+            summaryBox.innerHTML = `
+                <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: #999; text-align: center;">
+                    <p style="font-size: 30px; margin-bottom: 10px;"></p>
+                    <p>Données indisponibles pour ce département.</p>
+                </div>
+            `;
+        } else {
+            const rankRendement = rankedByRendement.findIndex(r => r.code === codeSelection) + 1;
+            const rankMetric = rankedByMetric.findIndex(r => r.code === codeSelection) + 1;
+        
+        // Récupération des AOP pour ce département
+        const aopList = aopParDepartement[codeSelection] || [];
+        let aopHTML = '';
+        if (aopList.length > 0) {
+            const maxAOPDisplay = 6;
+            const displayedAOP = aopList.slice(0, maxAOPDisplay);
+            const remainingCount = aopList.length - maxAOPDisplay;
+            
+            aopHTML = `
+                <div style="margin-top: 20px; border-top: 1px dashed #ccc; padding-top: 15px;">
+                    <p style="margin: 0 0 8px 0; font-size: 0.9em; color: #666; font-weight: 500;">Principales AOP :</p>
+                    <ul style="margin: 0; padding-left: 20px; font-size: 0.8em; color: #555; line-height: 1.6;">
+                        ${displayedAOP.map(aop => `<li>${aop}</li>`).join('')}
+                        ${remainingCount > 0 ? `<li style="font-style: italic; color: #999;">+ ${remainingCount} autre${remainingCount > 1 ? 's' : ''}...</li>` : ''}
+                    </ul>
+                </div>
+            `;
+        }
+
+        summaryBox.innerHTML = `
+            <div style="text-align: center; margin-bottom: 15px;">
+                <h4 style="margin: 0; color: #800020;">${d.nom} (${d.code})</h4>
+                <hr style="border: 0; border-top: 1px solid #ccc; margin: 10px 0;">
+            </div>
+            
+            <div style="margin-bottom: 20px;">
+                <p style="margin: 0; font-size: 0.9em; color: #666;">Rendement :</p>
+                <p style="margin: 5px 0; font-size: 1.2em; font-weight: bold;">
+                    ${Math.round(d.rendement)} <span style="font-size: 0.7em;">hl/ha</span>
+                </p>
+                <div style="font-size: 0.85em; color: #444; background: #e9ecef; padding: 4px 8px; border-radius: 4px;">
+                    Classé <strong>${rankRendement}<sup>e</sup></strong> sur ${totalDepts}
+                </div>
+            </div>
+
+            <div>
+                <p style="margin: 0; font-size: 0.9em; color: #666;">${metricConfig.label} :</p>
+                <p style="margin: 5px 0; font-size: 1.2em; font-weight: bold;">
+                    ${Math.round(d[metric])}${metricConfig.unit}
+                </p>
+                <div style="font-size: 0.85em; color: #444; background: #e9ecef; padding: 4px 8px; border-radius: 4px;">
+                    Classé <strong>${rankMetric}<sup>e</sup></strong> sur ${totalDepts}
+                </div>
+            </div>
+
+            ${aopHTML}
+
+            <div style="margin-top: 15px; font-size: 0.8em; font-style: italic; color: #777; border-top: 1px dashed #ccc; padding-top: 10px;">
+                Surface viticole : <strong>${Math.round(d.surface).toLocaleString()} ha</strong>
+            </div>
+        `;
+        }
+    } else {
+        summaryBox.innerHTML = `
+            <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: #999; text-align: center;">
+                <p style="font-size: 30px; margin-bottom: 10px;">🖱️</p>
+                <p>Cliquez sur un département sur l'une des cartes pour voir son analyse comparative.</p>
+            </div>
+        `;
+    }
+
+    // Ajout des colonnes au container principal
+    mapsContainer.appendChild(rendementMapContainer);
+    mapsContainer.appendChild(factorMapContainer);
+    mapsContainer.appendChild(summaryBox);
+
+    container.appendChild(mapsContainer);
+    
     // Graphique
     const plotContainer = document.createElement("div");
     plotContainer.style.marginTop = "20px";
-    
-    const labels = {
-        soleil: "Ensoleillement (h/an)",
-        altitude: "Altitude Moyenne (m)",
-        pente: "Pente Moyenne (%)",
-        exposition: "Exposition Moyenne (°)"
-    };
 
     const scatterplot = Plot.plot({
         width: width,
@@ -1118,7 +1419,7 @@ function renderImpactDashboard() {
             Plot.dot(combinedData, {
                 x: metric, 
                 y: "rendement", 
-                fill: d => colorScale(d.rendement),
+                fill: d => colorScaleRendement(d.rendement),
                 stroke: "#333",
                 strokeWidth: d => d.code === codeSelection ? 3 : 1,
                 r: d => (Math.sqrt(d.surface) / 2), 
