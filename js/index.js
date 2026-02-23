@@ -348,7 +348,9 @@ function renderProductionDashboard() {
         marks: [
             Plot.barX(topData, {
                 x: metric, y: "nom_dept",
-                fill: d => String(d.code_dept).padStart(2, '0') === codeSelection ? "#222" : barColorBase,
+                fill: d => String(d.code_dept).padStart(2, '0') === codeSelection
+                    ? "#222"
+                    : colorScaleMap(d[metric]),
                 sort: { y: "x", reverse: true }
             }),
             Plot.text(topData, {
@@ -462,7 +464,9 @@ function renderSunshineDashboard() {
         marks: [
             Plot.barX(dataSoleil, {
                 x: "heures_soleil", y: "nom_dept",
-                fill: d => String(d.code_dept).padStart(2, '0') === codeSelection ? "#d32f2f" : "#f39c12",
+                fill: d => String(d.code_dept).padStart(2, '0') === codeSelection
+                    ? "#222"
+                    : colorScaleMap(d.heures_soleil),
                 sort: { y: "x", reverse: true, limit: 15 }
             }),
             Plot.text(dataSoleil, {
@@ -628,7 +632,9 @@ function renderTopoDashboard(metric) {
             marks: [
                 Plot.barX(topData, {
                     x: metric, y: "nom_dept",
-                    fill: d => String(d.code_dep).padStart(2, '0') === codeSelection ? "#222" : cfg.color,
+                    fill: d => String(d.code_dep).padStart(2, '0') === codeSelection
+                        ? "#222"
+                        : colorScale(d[metric]),
                     sort: { y: "x", reverse: true }
                 }),
                 Plot.text(topData, {
