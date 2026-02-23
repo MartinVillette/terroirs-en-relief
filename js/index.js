@@ -7,6 +7,7 @@ let departementSelectionne = null;
 let choixVin = 'total_prod';
 let metricTopo = 'altitude';
 let facteurX = 'soleil';
+let tooltip = null; // Global tooltip instance
 
 // Helper function to create color legend
 function createColorLegend(colorScale, domain, unit = "", width = 300) {
@@ -69,17 +70,15 @@ function createColorLegend(colorScale, domain, unit = "", width = 300) {
     return container.node(); // Retourne l'élément DOM prêt à être inséré
 }
 
-// Helper function to create tooltip
-function createTooltip() {
-    return d3.select("body")
-        .append("div")
-        .attr("class", "svg-tooltip")
-        .style("visibility", "hidden");
-}
-
 // Load all data
 async function loadData() {
     try {
+        // Create global tooltip once
+        tooltip = d3.select("body")
+            .append("div")
+            .attr("class", "svg-tooltip")
+            .style("visibility", "hidden");
+
         const [prodData, deptData, sunData, topoData] = await Promise.all([
             d3.csv("data/processed/production_vins_2024_clean.csv", d3.autoType),
             d3.json("https://raw.githubusercontent.com/gregoiredavid/france-geojson/master/departements.geojson"),
@@ -130,9 +129,6 @@ function renderProductionDashboard() {
     const mapInterpolator = theme.scale;
     const barColorBase = theme.color;
     const titleLabel = theme.label;
-
-    // Create tooltip
-    const tooltip = createTooltip();
 
     // Create SVG for map
     const svgMap = d3.create("svg")
@@ -272,9 +268,6 @@ function renderSunshineDashboard() {
 
     const selection = departementSelectionne;
     const codeSelection = selection ? selection.code : null;
-
-    // Create tooltip
-    const tooltip = createTooltip();
 
     // Create SVG for map
     const svgMap = d3.create("svg")
@@ -422,9 +415,6 @@ function renderTopographyDashboard() {
     const selection = departementSelectionne;
     const codeSelection = selection ? selection.code : null;
     const metric = metricTopo;
-
-    // Create tooltip
-    const tooltip = createTooltip();
 
     // Create a map of department codes to names from GeoJSON
     const deptNamesMap = new Map();
@@ -631,9 +621,6 @@ function renderImpactDashboard() {
     const width = 850;
     const heightMap = 600;
     const heightPlot = 350;
-
-    // Create tooltip
-    const tooltip = createTooltip();
 
     // Préparation des données
     const topoMap = new Map(dataTopo.map(d => [String(d.code_dep).padStart(2, '0'), d]));
