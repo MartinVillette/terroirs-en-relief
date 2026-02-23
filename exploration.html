@@ -195,6 +195,19 @@
         .num-right {
             text-align: right;
         }
+        .source-container {
+            display: flex;
+            margin:10px 0;
+            gap:5px;
+            font-size: 11px;
+            color: rgb(153, 153, 153);
+            font-style: italic;
+        }
+        .source-container a {
+            color:#999;
+            text-decoration:underline;
+            cursor:pointer;
+        }
     </style>
 </head>
 <body>
@@ -265,6 +278,13 @@
             </table>
         </div>
 
+        <div class="source-container">
+            Source : 
+            <a href="https://www.douane.gouv.fr/la-douane/opendata/mots-cles/recolte">Douane.gouv</a> |
+            <a href="https://www.petitlopin.fr/?map=ensoleillement">linternaute.com</a> |
+            <a href="https://entrepot.recherche.data.gouv.fr/dataset.xhtml?persistentId=doi:10.57745/KBTLDH">INRAE</a>
+        </div>
+
         <div class="pagination">
             <button onclick="previousPage()">← Précédent</button>
             <span id="pageInfo">Page 1</span>
@@ -304,6 +324,11 @@
             </table>
         </div>
 
+        <div class="source-container">
+            Source : 
+            <a href="https://www.douane.gouv.fr/la-douane/opendata/mots-cles/recolte">Douane.gouv</a>
+        </div>
+
         <!-- Sunshine Data -->
         <h2>Données d'Ensoleillement</h2>
         <div class="table-container">
@@ -319,6 +344,11 @@
                     <tr><td colspan="3" class="loading">Chargement...</td></tr>
                 </tbody>
             </table>
+        </div>
+
+        <div class="source-container">
+            Source : 
+            <a href="https://www.petitlopin.fr/?map=ensoleillement">linternaute.com</a>
         </div>
 
         <!-- Topography Data -->
@@ -338,6 +368,11 @@
                     <tr><td colspan="5" class="loading">Chargement...</td></tr>
                 </tbody>
             </table>
+        </div>
+
+        <div class="source-container">
+            Source : 
+            <a href="https://entrepot.recherche.data.gouv.fr/dataset.xhtml?persistentId=doi:10.57745/KBTLDH">INRAE</a>
         </div>
     </div>
 
