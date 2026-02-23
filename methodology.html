@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard Production de Vins 2024</title>
+    <title>Méthodologie - Wine Geometry Viz</title>
     <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
     <script src="https://cdn.jsdelivr.net/npm/@observablehq/plot@0.6"></script>
     <style>
@@ -46,29 +46,123 @@
             padding-top: 20px;
             border-top: 2px solid #e0e0e0;
         }
-        .controls {
-            margin-bottom: 20px;
+        h3 {
+            color: #666;
+            margin-top: 25px;
+            margin-bottom: 10px;
         }
-        label {
-            margin-right: 10px;
-            font-weight: 500;
-        }
-        select {
-            padding: 8px 12px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 14px;
-            cursor: pointer;
+        p {
+            color: #444;
+            line-height: 1.8;
+            margin-bottom: 14px;
         }
         .dashboard-section {
             margin-top: 20px;
             margin-bottom: 40px;
         }
-        .loading {
-            color: gray;
-            padding: 20px;
-            text-align: center;
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
         }
+        thead {
+            background-color: #f5f5f5;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        th {
+            padding: 12px 8px;
+            text-align: left;
+            font-weight: 600;
+            color: #333;
+            border-bottom: 2px solid #ddd;
+            cursor: pointer;
+            user-select: none;
+            white-space: nowrap;
+        }
+        th:hover {
+            background-color: #e0e0e0;
+        }
+        td {
+            padding: 10px 8px;
+            border-bottom: 1px solid #eee;
+        }
+        tr:hover {
+            background-color: #f9f9f9;
+        }
+        .badge {
+            display: inline-block;
+            font-size: 11px;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-weight: 600;
+        }
+        .badge-geo  { background: #e3f2fd; color: #1565c0; }
+        .badge-prod { background: #f3e5f5; color: #6a1b9a; }
+        .badge-clim { background: #e8f5e9; color: #2e7d32; }
+        .badge-topo { background: #fff3e0; color: #e65100; }
+
+        img {
+            width:100%;
+            display: flex;
+            justify-content: center;
+            margin: 20px auto;
+            text-align: center;
+            border-radius: 10px;
+            max-width: 900px;
+        }
+    </style>
+
+    <style>
+        details {
+            margin: 20px 0;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+        summary {
+            padding: 10px 16px;
+            background-color: #f5f5f5;
+            cursor: pointer;
+            font-weight: 500;
+            color: #555;
+            font-size: 14px;
+            user-select: none;
+            list-style: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        summary::-webkit-details-marker { display: none; }
+        summary::before {
+            content: '▶';
+            font-size: 11px;
+            transition: transform 0.2s;
+        }
+        details[open] summary::before {
+            transform: rotate(90deg);
+        }
+        summary:hover {
+            background-color: #eeeeee;
+        }
+        pre {
+            margin: 0;
+            padding: 20px;
+            background-color: #1e1e1e;
+            overflow-x: auto;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+        code {
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            color: #d4d4d4;
+        }
+        .kw  { color: #569cd6; }
+        .fn  { color: #dcdcaa; }
+        .st  { color: #ce9178; }
+        .cm  { color: #6a9955; }
+        .nb  { color: #b5cea8; }
     </style>
 </head>
 <body>
@@ -80,7 +174,195 @@
             <a href="exploration.html">Explorer les données</a>
         </div>
 
-        <h1>Dashboard Vins & Géographie - France 2024</h1>
+        <h1>Méthodologie</h1>
+
+        <section>
+            <h2>Présentation du projet</h2>
+            <p>
+                Ce projet vise à croiser des données géographiques, topographiques, climatiques et économiques pour mieux comprendre la production viticole française. L'idée centrale est de mettre en relation les caractéristiques physiques des vignobles, leur altitude, leur pente, leur orientation, avec les volumes de production par appellation et par département. Pour cela, plusieurs sources de données ont été assemblées et traitées de manière à produire des visualisations interactives cohérentes.
+            </p>
+        </section>
+
+        <section>
+            <h2>Sources de données</h2>
+            <table class="sources-table">
+                <thead>
+                    <tr>
+                        <th>Jeu de données</th>
+                        <th>Type</th>
+                        <th>Année</th>
+                        <th>Format</th>
+                        <th>Lien</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>RPG sol et climat</strong><br>
+                            <small>Altitude, pente, exposition par parcelle agricole</small></td>
+                        <td><span class="badge badge-topo">Topographie</span></td>
+                        <td>2023</td>
+                        <td>.parquet</td>
+                        <td><a href="https://entrepot.recherche.data.gouv.fr/dataset.xhtml?persistentId=doi:10.57745/KBTLDH" target="_blank">INRAE</a></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Délimitation parcellaire AOC</strong><br>
+                            <small>Polygones des appellations d'origine contrôlée</small></td>
+                        <td><span class="badge badge-geo">Géographie</span></td>
+                        <td>2026</td>
+                        <td>.shp</td>
+                        <td><a href="https://www.data.gouv.fr/fr/datasets/delimitation-parcellaire-des-aoc-viticoles-de-linao/" target="_blank">data.gouv.fr</a></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Relevé par département de la production des vins</strong><br>
+                            <small>Production et déclarations par département</small></td>
+                        <td><span class="badge badge-prod">Production</span></td>
+                        <td>2024</td>
+                        <td>.xlsx</td>
+                        <td><a href="https://www.douane.gouv.fr/la-douane/opendata/mots-cles/recolte" target="_blank">douane.gouv.fr</a></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Ensoleillement annuel</strong><br>
+                            <small>Heures d'ensoleillement par département</small></td>
+                        <td><span class="badge badge-clim">Climatologie</span></td>
+                        <td>2024</td>
+                        <td>.csv</td>
+                        <td><a href="https://www.petitlopin.fr/?map=ensoleillement" target="_blank">linternaute.com</a></td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section>
+            <h2>Traitement des données</h2>
+            <p>
+                Le traitement commence par une mise en cohérence des systèmes de coordonnées. Les parcelles du RPG sont exprimées en hectomètres dans le système Lambert zone II étendu (EPSG:27572), et doivent être converties en mètres puis reprojetées en Lambert 93 (EPSG:2154), qui est le standard officiel français et celui utilisé par les délimitations AOC.
+            </p>
+            <p>
+                Une fois les deux couches dans le même référentiel, une jointure spatiale permet d'associer chaque parcelle viticole à son appellation. Pour limiter les effets des imprécisions de géoréférencement, les polygones AOC ont été légèrement dilatés d'une zone tampon de 50 mètres avant la jointure. Pour les départements ne présentant aucune correspondance directe, un mécanisme de secours est appliqué : l'appellation la plus proche dans un rayon de 500 mètres est assignée à la parcelle, ce qui garantit une couverture complète du territoire.
+            </p>
+            <p>
+                Les métriques topographiques sont ensuite agrégées par appellation et par département. Dans les deux cas, la moyenne est retenue pour l'altitude, la pente et l'exposition. Ce choix se justifie par le fait qu'une appellation ou un département regroupe de nombreuses parcelles aux terrains variés : la valeur moyenne reflète les conditions de culture représentatives de la zone. Le nombre de parcelles est quant à lui simplement comptabilisé.
+            </p>
+            <p>
+                Les données de production sont ensuite fusionnées avec les données topographiques via le code de département. Une variable synthétique, total_aop, est calculée comme la somme des productions AOP rouge, blanc et rosé. Il s'agit d'une somme car ces volumes sont des quantités complémentaires qui s'additionnent naturellement pour représenter l'ensemble de la production sous appellation AOC d'un département.
+            </p>
+            <img src="assets/images/schema.png" alt="Schéma du pipeline de traitement">
+        
+            <details>
+                <summary>Voir le script de traitement (prepare_data.py)</summary>
+                <pre><code><span class="kw">import</span> geopandas <span class="kw">as</span> gpd
+<span class="kw">import</span> pandas <span class="kw">as</span> pd
+<span class="kw">import</span> os
+
+<span class="cm"># --- CONFIGURATION ---</span>
+BASE_DIR = os.<span class="fn">path.dirname</span>(os.<span class="fn">path.dirname</span>(os.<span class="fn">path.abspath</span>(<span class="st">__file__</span>)))
+RAW_DATA_DIR = os.<span class="fn">path.join</span>(BASE_DIR, <span class="st">"data"</span>, <span class="st">"raw"</span>)
+PROCESSED_DATA_DIR = os.<span class="fn">path.join</span>(BASE_DIR, <span class="st">"data"</span>, <span class="st">"processed"</span>)
+
+PARQUET_PATH = os.<span class="fn">path.join</span>(RAW_DATA_DIR, <span class="st">"RPG2023_sol_climat.parquet"</span>)
+SHAPEFILE_AOC_DIR = os.<span class="fn">path.join</span>(RAW_DATA_DIR, <span class="st">"2026-01-06-delim-parcellaire-aoc-shp"</span>)
+SHAPEFILE_AOC = os.<span class="fn">path.join</span>(SHAPEFILE_AOC_DIR, <span class="st">"2026-01-06_delim-parcellaire-aoc-shp.shp"</span>)
+PRODUCTION_CSV_PATH = os.<span class="fn">path.join</span>(RAW_DATA_DIR, <span class="st">"production_vins_2024_clean.csv"</span>)
+
+os.<span class="fn">makedirs</span>(PROCESSED_DATA_DIR, exist_ok=<span class="kw">True</span>)
+
+<span class="cm"># ==============================================================================
+# ÉTAPE 1 : PRÉPARATION SPATIALE
+# ==============================================================================</span>
+<span class="fn">print</span>(<span class="st">"1. Chargement et Nettoyage des données..."</span>)
+
+col_nom_aoc = <span class="st">'app'</span>
+aoc_gdf = gpd.<span class="fn">read_file</span>(SHAPEFILE_AOC)
+aoc_gdf = aoc_gdf[[col_nom_aoc, <span class="st">'geometry'</span>]]
+<span class="kw">if</span> aoc_gdf.crs <span class="kw">is None</span>:
+    aoc_gdf.<span class="fn">set_crs</span>(<span class="st">"EPSG:2154"</span>, inplace=<span class="kw">True</span>)
+<span class="kw">else</span>:
+    aoc_gdf = aoc_gdf.<span class="fn">to_crs</span>(<span class="st">"EPSG:2154"</span>)
+
+df_topo = pd.<span class="fn">read_parquet</span>(PARQUET_PATH)
+df_points = df_topo[[<span class="st">'mf_lambx'</span>, <span class="st">'mf_lamby'</span>, <span class="st">'pente_mean'</span>, <span class="st">'alt_mean'</span>, <span class="st">'expo_mean'</span>, <span class="st">'id_parcel'</span>, <span class="st">'dep_parc'</span>]].<span class="fn">copy</span>()
+df_points = df_points.<span class="fn">dropna</span>(subset=[<span class="st">'mf_lambx'</span>, <span class="st">'mf_lamby'</span>, <span class="st">'dep_parc'</span>])
+df_points[<span class="st">'x_m'</span>] = df_points[<span class="st">'mf_lambx'</span>] * <span class="nb">100</span>
+df_points[<span class="st">'y_m'</span>] = df_points[<span class="st">'mf_lamby'</span>] * <span class="nb">100</span>
+
+points_gdf = gpd.<span class="fn">GeoDataFrame</span>(
+    df_points,
+    geometry=gpd.<span class="fn">points_from_xy</span>(df_points[<span class="st">'x_m'</span>], df_points[<span class="st">'y_m'</span>]),
+    crs=<span class="st">"EPSG:27572"</span>
+).<span class="fn">to_crs</span>(<span class="st">"EPSG:2154"</span>)
+
+<span class="cm"># ==============================================================================
+# ÉTAPE 2 : JOINTURE SPATIALE
+# ==============================================================================</span>
+<span class="fn">print</span>(<span class="st">"2. Jointure Spatiale..."</span>)
+
+aoc_buffered = aoc_gdf.<span class="fn">copy</span>()
+aoc_buffered[<span class="st">'geometry'</span>] = aoc_gdf.geometry.<span class="fn">buffer</span>(<span class="nb">50</span>)
+
+vignes_in_aoc = gpd.<span class="fn">sjoin</span>(points_gdf, aoc_buffered, how=<span class="st">"inner"</span>, predicate=<span class="st">"within"</span>)
+
+matched_deps = <span class="fn">set</span>(vignes_in_aoc[<span class="st">'dep_parc'</span>].<span class="fn">dropna</span>().<span class="fn">astype</span>(<span class="st">str</span>).str.<span class="fn">zfill</span>(<span class="nb">2</span>).<span class="fn">unique</span>())
+all_deps = <span class="fn">set</span>(df_points[<span class="st">'dep_parc'</span>].<span class="fn">dropna</span>().<span class="fn">astype</span>(<span class="st">str</span>).str.<span class="fn">zfill</span>(<span class="nb">2</span>).<span class="fn">unique</span>())
+missing_deps = all_deps - matched_deps
+
+<span class="kw">if</span> missing_deps:
+    missing_points = points_gdf[points_gdf[<span class="st">'dep_parc'</span>].<span class="fn">astype</span>(<span class="st">str</span>).str.<span class="fn">zfill</span>(<span class="nb">2</span>).<span class="fn">isin</span>(missing_deps)]
+    fallback = gpd.<span class="fn">sjoin_nearest</span>(missing_points, aoc_gdf, how=<span class="st">"inner"</span>, max_distance=<span class="nb">500</span>)
+    vignes_in_aoc = pd.<span class="fn">concat</span>([vignes_in_aoc, fallback], ignore_index=<span class="kw">True</span>)
+
+<span class="cm"># ==============================================================================
+# ÉTAPE 3 : EXPORT PAR APPELLATION
+# ==============================================================================</span>
+<span class="fn">print</span>(<span class="st">"3. GÉNÉRATION : PAR APPELLATION"</span>)
+
+df_app = vignes_in_aoc.<span class="fn">groupby</span>(col_nom_aoc).<span class="fn">agg</span>({
+    <span class="st">'pente_mean'</span>: <span class="st">'mean'</span>,
+    <span class="st">'alt_mean'</span>: <span class="st">'mean'</span>,
+    <span class="st">'expo_mean'</span>: <span class="st">'mean'</span>,
+    <span class="st">'id_parcel'</span>: <span class="st">'count'</span>
+}).<span class="fn">reset_index</span>().<span class="fn">rename</span>(columns={
+    col_nom_aoc: <span class="st">'appellation'</span>,
+    <span class="st">'pente_mean'</span>: <span class="st">'pente'</span>,
+    <span class="st">'alt_mean'</span>: <span class="st">'altitude'</span>,
+    <span class="st">'expo_mean'</span>: <span class="st">'exposition'</span>,
+    <span class="st">'id_parcel'</span>: <span class="st">'nb_parcelles'</span>
+})
+
+df_app.<span class="fn">to_csv</span>(os.<span class="fn">path.join</span>(PROCESSED_DATA_DIR, <span class="st">"topo_par_appellation.csv"</span>), index=<span class="kw">False</span>)
+
+<span class="cm"># ==============================================================================
+# ÉTAPE 4 : EXPORT PAR DÉPARTEMENT
+# ==============================================================================</span>
+<span class="fn">print</span>(<span class="st">"4. GÉNÉRATION : PAR DÉPARTEMENT"</span>)
+
+vignes_uniques = vignes_in_aoc.<span class="fn">drop_duplicates</span>(subset=<span class="st">'id_parcel'</span>).<span class="fn">copy</span>()
+vignes_uniques[<span class="st">'code_dep'</span>] = vignes_uniques[<span class="st">'dep_parc'</span>].<span class="fn">astype</span>(<span class="st">str</span>).str.<span class="fn">zfill</span>(<span class="nb">2</span>)
+
+df_dep = vignes_uniques.<span class="fn">groupby</span>(<span class="st">'code_dep'</span>).<span class="fn">agg</span>({
+    <span class="st">'pente_mean'</span>: <span class="st">'mean'</span>,
+    <span class="st">'alt_mean'</span>: <span class="st">'mean'</span>,
+    <span class="st">'expo_mean'</span>: <span class="st">'mean'</span>,
+    <span class="st">'id_parcel'</span>: <span class="st">'count'</span>
+}).<span class="fn">reset_index</span>().<span class="fn">rename</span>(columns={
+    <span class="st">'pente_mean'</span>: <span class="st">'pente'</span>,
+    <span class="st">'alt_mean'</span>: <span class="st">'altitude'</span>,
+    <span class="st">'expo_mean'</span>: <span class="st">'exposition'</span>,
+    <span class="st">'id_parcel'</span>: <span class="st">'nb_parcelles_vignes'</span>
+})
+
+df_dep.<span class="fn">to_csv</span>(os.<span class="fn">path.join</span>(PROCESSED_DATA_DIR, <span class="st">"topo_par_departement.csv"</span>), index=<span class="kw">False</span>)
+            </code></pre>
+            </details>
+        </section>
+
+        <section>
+            <h2>Comprendre les parcelles viticoles</h2>
+            <p>
+                Les parcelles viticoles sont les unités de base de l'analyse topographique. Chaque parcelle est un polygone géographique correspondant à une parcelle cadastrale déclarée en vigne. Les métriques d'altitude, de pente et d'exposition sont calculées à partir du modèle numérique de terrain et représentent des valeurs moyennes sur l'ensemble de la surface de la parcelle.
+            </p>
+            <img src="assets/images/parcelles.png" alt="Illustration des parcelles viticoles">
+        </section>
+
     </div>
 </body>
 </html>
