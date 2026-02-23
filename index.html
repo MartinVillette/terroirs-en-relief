@@ -32,20 +32,48 @@
             text-decoration: none;
             font-weight: 500;
         }
-        .nav-links a:hover {
-            text-decoration: underline;
-        }
+        .nav-links a:hover { text-decoration: underline; }
         h1 {
             color: #333;
             margin-bottom: 20px;
         }
-        h2 {
-            color: #555;
-            margin-top: 40px;
-            margin-bottom: 20px;
-            padding-top: 20px;
-            border-top: 2px solid #e0e0e0;
+
+        /* Tab navigation */
+        .tab-nav {
+            display: flex;
+            gap: 6px;
+            margin-bottom: 24px;
+            border-bottom: 2px solid #e0e0e0;
+            padding-bottom: 0;
+            flex-wrap: wrap;
         }
+        .tab-btn {
+            padding: 10px 18px;
+            border: none;
+            background: none;
+            font-size: 14px;
+            font-weight: 500;
+            color: #777;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            margin-bottom: -2px;
+            border-radius: 4px 4px 0 0;
+            transition: color 0.15s, border-color 0.15s, background 0.15s;
+        }
+        .tab-btn:hover {
+            color: #333;
+            background: #f5f5f5;
+        }
+        .tab-btn.active {
+            color: #1976d2;
+            border-bottom: 3px solid #1976d2;
+            background: #f0f6ff;
+        }
+
+        /* Tab panels */
+        .tab-panel { display: none; }
+        .tab-panel.active { display: block; }
+
         .controls {
             margin-bottom: 20px;
         }
@@ -81,56 +109,77 @@
         </div>
 
         <h1>Dashboard Vins & Géographie - France 2024</h1>
-        
-        <!-- Production Dashboard -->
-        <h2>Production de Vins</h2>
-        <div class="controls">
-            <label for="wineType">Type de vin :</label>
-            <select id="wineType">
-                <option value="total_aop">Production Totale</option>
-                <option value="aop_rouge">Vin Rouge</option>
-                <option value="aop_blanc">Vin Blanc</option>
-                <option value="aop_rose">Vin Rosé</option>
-            </select>
-        </div>
-        <div id="production-dashboard" class="dashboard-section">
-            <div class="loading">Chargement des données de production...</div>
+
+        <!-- Tab navigation -->
+        <div class="tab-nav">
+            <button class="tab-btn active" data-tab="production">Production</button>
+            <button class="tab-btn" data-tab="ensoleillement">Ensoleillement</button>
+            <button class="tab-btn" data-tab="pente">Pente</button>
+            <button class="tab-btn" data-tab="orientation">Orientation</button>
+            <button class="tab-btn" data-tab="altitude">Altitude</button>
+            <button class="tab-btn" data-tab="impact">Impact</button>
         </div>
 
-        <!-- Sunshine Dashboard -->
-        <h2>Ensoleillement</h2>
-        <div id="sunshine-dashboard" class="dashboard-section">
-            <div class="loading">Chargement des données d'ensoleillement...</div>
+        <!-- Production -->
+        <div class="tab-panel active" id="tab-production">
+            <div class="controls">
+                <label for="wineType">Type de vin :</label>
+                <select id="wineType">
+                    <option value="total_aop">Production Totale AOP</option>
+                    <option value="aop_rouge">Vin Rouge AOP</option>
+                    <option value="aop_blanc">Vin Blanc AOP</option>
+                    <option value="aop_rose">Vin Rosé AOP</option>
+                </select>
+            </div>
+            <div id="production-dashboard" class="dashboard-section">
+                <div class="loading">Chargement des données de production...</div>
+            </div>
         </div>
 
-        <!-- Topography Dashboard -->
-        <h2>Topographie</h2>
-        <div class="controls">
-            <label for="topoMetric">Métrique topographique :</label>
-            <select id="topoMetric">
-                <option value="altitude">Altitude</option>
-                <option value="pente">Pente</option>
-                <option value="exposition">Exposition</option>
-            </select>
-        </div>
-        <div id="topography-dashboard" class="dashboard-section">
-            <div class="loading">Chargement des données topographiques...</div>
+        <!-- Ensoleillement -->
+        <div class="tab-panel" id="tab-ensoleillement">
+            <div id="sunshine-dashboard" class="dashboard-section">
+                <div class="loading">Chargement des données d'ensoleillement...</div>
+            </div>
         </div>
 
-        <!-- Impact Dashboard -->
-        <h2>Impact sur le Rendement</h2>
-        <div class="controls">
-            <label for="impactFactor">Facteur d'analyse :</label>
-            <select id="impactFactor">
-                <option value="soleil">Ensoleillement</option>
-                <option value="altitude">Altitude</option>
-                <option value="pente">Pente</option>
-                <option value="exposition">Exposition</option>
-            </select>
+        <!-- Pente -->
+        <div class="tab-panel" id="tab-pente">
+            <div id="pente-dashboard" class="dashboard-section">
+                <div class="loading">Chargement des données de pente...</div>
+            </div>
         </div>
-        <div id="impact-dashboard" class="dashboard-section">
-            <div class="loading">Chargement de l'analyse d'impact...</div>
+
+        <!-- Orientation -->
+        <div class="tab-panel" id="tab-orientation">
+            <div id="orientation-dashboard" class="dashboard-section">
+                <div class="loading">Chargement des données d'orientation...</div>
+            </div>
         </div>
+
+        <!-- Altitude -->
+        <div class="tab-panel" id="tab-altitude">
+            <div id="altitude-dashboard" class="dashboard-section">
+                <div class="loading">Chargement des données d'altitude...</div>
+            </div>
+        </div>
+
+        <!-- Impact -->
+        <div class="tab-panel" id="tab-impact">
+            <div class="controls">
+                <label for="impactFactor">Facteur d'analyse :</label>
+                <select id="impactFactor">
+                    <option value="soleil">Ensoleillement</option>
+                    <option value="altitude">Altitude</option>
+                    <option value="pente">Pente</option>
+                    <option value="exposition">Exposition</option>
+                </select>
+            </div>
+            <div id="impact-dashboard" class="dashboard-section">
+                <div class="loading">Chargement de l'analyse d'impact...</div>
+            </div>
+        </div>
+
     </div>
 
     <script src="js/index.js"></script>

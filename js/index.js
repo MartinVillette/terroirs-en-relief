@@ -7,6 +7,17 @@ let departementSelectionne = null;
 let choixVin = 'total_aop';
 let metricTopo = 'altitude';
 let facteurX = 'soleil';
+const renderedTabs = new Set();
+
+function setDepartement(code) {
+    const normalized = code ? String(code).padStart(2, '0') : null;
+    departementSelectionne = (departementSelectionne === normalized) ? null : normalized;
+    rerenderAllRenderedTabs();
+}
+
+function rerenderAllRenderedTabs() {
+    renderedTabs.forEach(tabId => renderTab(tabId));
+}
 
 // Mapping des principales AOP par département
 const aopParDepartement = {
@@ -90,6 +101,34 @@ function hideTooltip() {
     tooltip.style("display", "none");
 }
 
+// Tab switching logic
+document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+        btn.classList.add('active');
+        const tabId = btn.dataset.tab;
+        document.getElementById('tab-' + tabId).classList.add('active');
+
+        // Render on first visit (lazy rendering)
+        if (!renderedTabs.has(tabId)) {
+            renderTab(tabId);
+            renderedTabs.add(tabId);
+        }
+    });
+});
+
+function renderTab(tabId) {
+    switch (tabId) {
+        case 'production':    renderProductionDashboard(); break;
+        case 'ensoleillement': renderSunshineDashboard(); break;
+        case 'pente':         renderTopoDashboard('pente'); break;
+        case 'orientation':   renderTopoDashboard('exposition'); break;
+        case 'altitude':      renderTopoDashboard('altitude'); break;
+        case 'impact':        renderImpactDashboard(); break;
+    }
+}
+
 // Load all data
 async function loadData() {
     try {
@@ -104,16 +143,51 @@ async function loadData() {
         departments = deptData;
         dataSoleil = sunData;
         dataTopo = topoData;
-        
+
+        // Render the first tab (production) on load
         renderProductionDashboard();
-        renderSunshineDashboard();
-        renderTopographyDashboard();
-        renderImpactDashboard();
+        renderedTabs.add('production');
+
     } catch (error) {
-        document.getElementById('production-dashboard').innerHTML = 
+        document.getElementById('production-dashboard').innerHTML =
             `<div style="color: red; padding: 20px;">Erreur de chargement : ${error.message}</div>`;
     }
 }
+
+// ─── Helper: render a distribution histogram ─────────────────────────────────
+function renderDistributionChart(data, metric, unit, color, width, height, title) {
+    const values = data.map(d => d[metric]).filter(v => v > 0);
+    const binGenerator = d3.bin().thresholds(12)(values);
+
+    const binData = binGenerator.map(b => ({
+        x0: b.x0,
+        x1: b.x1,
+        count: b.length,
+        label: `${Math.round(b.x0)} – ${Math.round(b.x1)} ${unit}`
+    }));
+
+    return Plot.plot({
+        title,
+        width,
+        height,
+        marginLeft: 50,
+        marginBottom: 40,
+        x: { label: unit, tickFormat: "s" },
+        y: { label: "Nb. départements", grid: true },
+        marks: [
+            Plot.rectY(binData, {
+                x1: "x0",
+                x2: "x1",
+                y: "count",
+                fill: color,
+                fillOpacity: 0.8,
+                title: d => `${d.label}\n${d.count} département(s)`
+            }),
+            Plot.ruleY([0])
+        ]
+    });
+}
+
 
 function appendMapLegend(containerDiv, colorScale, domain, label, format = d => Math.round(d)) {
     const legendWidth = 200;
@@ -202,648 +276,419 @@ function appendMapSource(containerDiv, source, url = null) {
     containerDiv.appendChild(sourceDiv);
 }
 
-// Render Production Dashboard
+
+// ─── Production Dashboard ─────────────────────────────────────────────────────
 function renderProductionDashboard() {
-    if (!dataProd || !departments) {
-        document.getElementById('production-dashboard').innerHTML = 
-            '<div class="loading">Chargement des données de production...</div>';
-        return;
-    }
+    if (!dataProd || !departments) return;
 
     const widthMap = 500;
     const heightMap = 500;
-    const widthChart = 500;
-    const heightChart = 500;
+    const widthChart = 420;
+    const heightChart = 460;
 
     const metric = choixVin;
-    const selection = departementSelectionne;
-    const codeSelection = selection ? selection.code : null;
-    
+    const codeSelection = departementSelectionne;
+
     const themes = {
         total_aop: { scale: d3.interpolatePuRd, color: "#8e24aa", label: "Production Totale AOP" },
-        aop_rouge: { scale: d3.interpolateReds, color: "#d32f2f", label: "Vin Rouge AOP" },
-        aop_blanc: { scale: d3.interpolateYlGn, color: "#9ccc65", label: "Vin Blanc AOP" },
-        aop_rose: { scale: d3.interpolateRdPu, color: "#f06292", label: "Vin Rosé AOP" }
+        aop_rouge: { scale: d3.interpolateReds,  color: "#d32f2f", label: "Vin Rouge AOP" },
+        aop_blanc: { scale: d3.interpolateYlGn,  color: "#9ccc65", label: "Vin Blanc AOP" },
+        aop_rose:  { scale: d3.interpolateRdPu,  color: "#f06292", label: "Vin Rosé AOP" }
     };
 
-    const theme = themes[metric] || themes.total_prod;
+    const theme = themes[metric];
     const mapInterpolator = theme.scale;
     const barColorBase = theme.color;
     const titleLabel = theme.label;
 
-    // Create SVG for map
-    const svgMap = d3.create("svg")
-        .attr("width", widthMap)
-        .attr("height", heightMap)
-        .attr("viewBox", [0, 0, widthMap, heightMap]);
-
-    const projection = d3.geoConicConformal()
-        .center([2.454071, 46.279229])
-        .scale(2600)
-        .translate([widthMap / 2, heightMap / 2]);
-    const path = d3.geoPath().projection(projection);
-
     const maxVal = d3.max(dataProd, d => d[metric]) || 10000;
     const colorScaleMap = d3.scaleSequential([0, maxVal], mapInterpolator);
+    const totalWidth = widthMap + widthChart + 20; // 20 = gap
+
+    // ── Map ──
+    const svgMap = d3.create("svg").attr("width", widthMap).attr("height", heightMap).attr("viewBox", [0, 0, widthMap, heightMap]);
+    const projection = d3.geoConicConformal().center([2.454071, 46.279229]).scale(2600).translate([widthMap / 2, heightMap / 2]);
+    const path = d3.geoPath().projection(projection);
 
     const geojson = JSON.parse(JSON.stringify(departments));
     for (const feature of geojson.features) {
         const depCode = feature.properties.code;
         const row = dataProd.find(d => String(d.code_dept).padStart(2, '0') === depCode);
         feature.properties.value = row ? row[metric] : 0;
-        feature.properties.code = depCode;
     }
 
     const g = svgMap.append("g");
-    const paths = g.selectAll("path")
-        .data(geojson.features)
-        .join("path")
+    const paths = g.selectAll("path").data(geojson.features).join("path")
         .attr("d", path)
         .attr("fill", d => d.properties.value > 0 ? colorScaleMap(d.properties.value) : "#eee")
-        .attr("stroke", "white")
-        .attr("stroke-width", 0.5)
-        .attr("cursor", "pointer");
+        .attr("stroke", "white").attr("stroke-width", 0.5).attr("cursor", "pointer");
 
-    paths.filter(d => d.properties.code === codeSelection)
-        .attr("stroke", "#000").attr("stroke-width", 2.5).raise();
+    paths.filter(d => d.properties.code === codeSelection).attr("stroke", "#000").attr("stroke-width", 2.5).raise();
 
-    paths.on("click", (e, d) => {
-            departementSelectionne = d.properties;
-            renderProductionDashboard();
-            renderSunshineDashboard();
-            renderTopographyDashboard();
-        })
+    paths.on("click", (e, d) => { setDepartement(d.properties.code); })
         .on("mouseover", function(e, d) {
             d3.select(this).attr("stroke", "#333").attr("stroke-width", 2).raise();
-            const val = d.properties.value;
-            showTooltip(e, `
-                <strong>${d.properties.nom}</strong><br>
-                ${titleLabel} : <strong>${Math.round(val).toLocaleString()} hl</strong>
-            `);
+            showTooltip(e, `<strong>${d.properties.nom}</strong><br>${titleLabel} : <strong>${Math.round(d.properties.value).toLocaleString()} hl</strong>`);
         })
+        .on("mousemove", moveTooltip)
         .on("mouseout", function(e, d) {
             const isSel = d.properties.code === codeSelection;
-            d3.select(this).attr("stroke", isSel ? "#000" : "white")
-                .attr("stroke-width", isSel ? 2.5 : 0.5);
-            if (!isSel && codeSelection) {
-                paths.filter(p => p.properties.code === codeSelection).raise();
-            }
+            d3.select(this).attr("stroke", isSel ? "#000" : "white").attr("stroke-width", isSel ? 2.5 : 0.5);
+            if (!isSel && codeSelection) paths.filter(p => p.properties.code === codeSelection).raise();
             hideTooltip();
-        })
+        });
 
-    // Create bar chart
-    const topData = [...dataProd]
-        .sort((a, b) => d3.descending(a[metric], b[metric]))
-        .slice(0, 15);
-
-    const chart = Plot.plot({
+    // ── Top 15 bar chart ──
+    const topData = [...dataProd].sort((a, b) => d3.descending(a[metric], b[metric])).slice(0, 15);
+    const barChart = Plot.plot({
         title: `Top 15 : ${titleLabel} (hl)`,
-        marginLeft: 120,
-        width: widthChart,
-        height: heightChart,
+        marginLeft: 120, width: widthChart, height: heightChart,
         x: { label: null, grid: true, tickFormat: "s" },
         y: { label: null },
         marks: [
             Plot.barX(topData, {
-                x: metric,
-                y: "nom_dept",
+                x: metric, y: "nom_dept",
                 fill: d => String(d.code_dept).padStart(2, '0') === codeSelection ? "#222" : barColorBase,
                 sort: { y: "x", reverse: true }
             }),
             Plot.text(topData, {
-                x: metric,
-                y: "nom_dept",
+                x: metric, y: "nom_dept",
                 text: d => (d[metric] / 1000).toFixed(0) + "k",
-                textAnchor: "start",
-                dx: 5,
-                fill: "#444",
-                fontSize: 10
+                textAnchor: "start", dx: 5, fill: "#444", fontSize: 10
             })
         ]
     });
 
-    // Define info texts for each wine type
+    // ── Distribution histogram (full width) ──
+    const histChart = renderDistributionChart(
+        dataProd, metric, "hl", barColorBase, totalWidth, 220,
+        `Répartition des départements par volume (${titleLabel})`
+    );
+
+    // ── Info bubble ──
     const infoTexts = {
-        total_aop: `L'<strong>Hérault</strong> cumule une grande production de rouge, blanc et rosé pour atteindre la première place du classement, tandis que la <strong>Gironde</strong> (Bordeaux) s'impose à la seconde place avec une production quasi-exclusive de vin rouge.`,
-        aop_rouge: `La <strong>Gironde</strong> est la région du Bordeaux, produisant les plus grands vins rouges français 
-            (Pauillac, Margaux, Saint-Émilion, Pomerol). Cette tradition séculaire en fait le leader incontesté du vin rouge.`,
-        aop_blanc: `La <strong>Marne</strong> (Champagne) et l'<strong>Hérault</strong> (Languedoc) dominent la production de vins blancs. 
-            La Marne produit les célèbres champagnes, tandis que l'Hérault bénéficie d'un climat méditerranéen idéal pour les blancs secs.`,
-        aop_rose: `Les <strong>Bouches-du-Rhône</strong> et le <strong>Var</strong> dominent la production de rosé, au cœur du bassin méditerranéen. 
-            L'<strong>AOC Côtes de Provence</strong> est la plus importante appellation de rosé au monde.`
+        total_aop: `L'<strong>Hérault</strong> cumule une grande production de rouge, blanc et rosé pour atteindre la première place, tandis que la <strong>Gironde</strong> s'impose à la seconde place avec une production quasi-exclusive de vin rouge.`,
+        aop_rouge: `La <strong>Gironde</strong> est la région du Bordeaux, produisant les plus grands vins rouges français (Pauillac, Margaux, Saint-Émilion, Pomerol).`,
+        aop_blanc: `La <strong>Marne</strong> (Champagne) et l'<strong>Hérault</strong> (Languedoc) dominent la production de vins blancs AOP.`,
+        aop_rose:  `Les <strong>Bouches-du-Rhône</strong> et le <strong>Var</strong> dominent la production de rosé, au cœur du bassin méditerranéen.`
     };
-
-    // Add info bubble
     const infoBubble = document.createElement("div");
-    infoBubble.style.backgroundColor = barColorBase + "15"; // 15 = opacity in hex (~8%)
-    infoBubble.style.border = `2px solid ${barColorBase}`;
-    infoBubble.style.borderRadius = "8px";
-    infoBubble.style.padding = "12px 16px";
-    infoBubble.style.marginBottom = "15px";
-    infoBubble.style.fontSize = "13px";
-    infoBubble.style.lineHeight = "1.5";
-    infoBubble.style.color = "#333";
-    infoBubble.innerHTML = `
-        <strong style="color: ${barColorBase};">💡 ${titleLabel}</strong><br/>
-        ${infoTexts[metric]}
-    `;
+    infoBubble.style.cssText = `background:${barColorBase}15; border:2px solid ${barColorBase}; border-radius:8px; padding:12px 16px; font-size:13px; line-height:1.5; color:#333; width:${totalWidth}px; box-sizing:border-box;`;
+    infoBubble.innerHTML = `<strong style="color:${barColorBase};">💡 ${titleLabel}</strong><br/>${infoTexts[metric]}`;
 
-    // Assemble the dashboard
-    const div = document.createElement("div");
-    div.style.display = "flex";
-    div.style.alignItems = "flex-start";
-    div.style.gap = "20px";
+    // ── Layout ──
+    const wrapper = document.createElement("div");
+    wrapper.style.cssText = "display:flex; flex-direction:column; gap:16px;";
 
-    const left = document.createElement("div");
-    left.style.display = "flex";
-    left.style.flexDirection = "column";
-    left.appendChild(svgMap.node());
-    appendMapLegend(left, colorScaleMap, [0, maxVal], titleLabel + " (hl)", d => (d / 1000).toFixed(0) + "k");
-    appendMapSource(left, "Douane.gouv", "https://www.douane.gouv.fr/la-douane/opendata/mots-cles/recolte");
+    // Top row: map + bar chart side by side
+    const topRow = document.createElement("div");
+    topRow.style.cssText = "display:flex; align-items:flex-start; gap:20px;";
 
-    const right = document.createElement("div");
-    right.appendChild(infoBubble);
-    right.appendChild(chart);
+    const leftCol = document.createElement("div");
+    leftCol.style.cssText = "display:flex; flex-direction:column;";
+    leftCol.appendChild(svgMap.node());
+    appendMapLegend(leftCol, colorScaleMap, [0, maxVal], titleLabel + " (hl)", d => (d / 1000).toFixed(0) + "k");
 
-    div.appendChild(left);
-    div.appendChild(right);
+    const rightCol = document.createElement("div");
+    rightCol.appendChild(barChart);
 
-    // Update container
+    topRow.appendChild(leftCol);
+    topRow.appendChild(rightCol);
+
+    // Bottom row: histogram full width
+    const bottomRow = document.createElement("div");
+    bottomRow.style.cssText = "display:flex; flex-direction:column; gap:10px;";
+    bottomRow.appendChild(histChart);
+    bottomRow.appendChild(infoBubble);
+
+    appendMapSource(bottomRow, "Douane.gouv", "https://www.douane.gouv.fr/la-douane/opendata/mots-cles/recolte");
+
+    wrapper.appendChild(topRow);
+    wrapper.appendChild(bottomRow);
+
     const dashboardContainer = document.getElementById('production-dashboard');
     dashboardContainer.innerHTML = '';
-    dashboardContainer.appendChild(div);
+    dashboardContainer.appendChild(wrapper);
 }
 
-// Render Sunshine Dashboard
+// ─── Sunshine Dashboard ───────────────────────────────────────────────────────
 function renderSunshineDashboard() {
-    if (!dataSoleil || !departments) {
-        document.getElementById('sunshine-dashboard').innerHTML = 
-            '<div class="loading">Chargement des données d\'ensoleillement...</div>';
-        return;
-    }
+    if (!dataSoleil || !departments) return;
 
-    const widthMap = 500;
-    const heightMap = 500;
-    const widthChart = 500;
-    const heightChart = 500;
-
-    const selection = departementSelectionne;
-    const codeSelection = selection ? selection.code : null;
-
-    // Create SVG for map
-    const svgMap = d3.create("svg")
-        .attr("width", widthMap)
-        .attr("height", heightMap)
-        .attr("viewBox", [0, 0, widthMap, heightMap]);
-
-    const projection = d3.geoConicConformal()
-        .center([2.454071, 46.279229])
-        .scale(2600)
-        .translate([widthMap / 2, heightMap / 2]);
-    const path = d3.geoPath().projection(projection);
+    const widthMap = 500, heightMap = 500, widthChart = 420, heightChart = 460;
+    const totalWidth = widthMap + widthChart + 20;
+    const codeSelection = departementSelectionne;
 
     const maxVal = d3.max(dataSoleil, d => d.heures_soleil) || 3000;
     const colorScaleMap = d3.scaleSequential([0, maxVal], d3.interpolateYlOrRd);
+
+    const svgMap = d3.create("svg").attr("width", widthMap).attr("height", heightMap).attr("viewBox", [0, 0, widthMap, heightMap]);
+    const projection = d3.geoConicConformal().center([2.454071, 46.279229]).scale(2600).translate([widthMap / 2, heightMap / 2]);
+    const path = d3.geoPath().projection(projection);
 
     const geojson = JSON.parse(JSON.stringify(departments));
     for (const feature of geojson.features) {
         const depCode = feature.properties.code;
         const row = dataSoleil.find(d => String(d.code_dept).padStart(2, '0') === depCode);
         feature.properties.value = row ? row.heures_soleil : 0;
-        feature.properties.code = depCode;
     }
 
     const g = svgMap.append("g");
-    const paths = g.selectAll("path")
-        .data(geojson.features)
-        .join("path")
+    const paths = g.selectAll("path").data(geojson.features).join("path")
         .attr("d", path)
         .attr("fill", d => d.properties.value > 0 ? colorScaleMap(d.properties.value) : "#eee")
-        .attr("stroke", "white")
-        .attr("stroke-width", 0.5)
-        .attr("cursor", "pointer");
+        .attr("stroke", "white").attr("stroke-width", 0.5).attr("cursor", "pointer");
 
-    paths.filter(d => d.properties.code === codeSelection)
-        .attr("stroke", "#000").attr("stroke-width", 2.5).raise();
+    paths.filter(d => d.properties.code === codeSelection).attr("stroke", "#000").attr("stroke-width", 2.5).raise();
 
-    paths.on("click", (e, d) => {
-            departementSelectionne = d.properties;
-            renderProductionDashboard();
-            renderSunshineDashboard();
-            renderTopographyDashboard();
-        })
+    paths.on("click", (e, d) => { setDepartement(d.properties.code); })
         .on("mouseover", function(e, d) {
             d3.select(this).attr("stroke", "#333").attr("stroke-width", 2).raise();
-            showTooltip(e, `
-                <strong>${d.properties.nom}</strong><br>
-                Ensoleillement : <strong>${Math.round(d.properties.value).toLocaleString()} h/an</strong>
-            `);
+            showTooltip(e, `<strong>${d.properties.nom}</strong><br>Ensoleillement : <strong>${Math.round(d.properties.value).toLocaleString()} h/an</strong>`);
         })
         .on("mousemove", moveTooltip)
         .on("mouseout", function(e, d) {
             const isSel = d.properties.code === codeSelection;
-            d3.select(this).attr("stroke", isSel ? "#000" : "white")
-                .attr("stroke-width", isSel ? 2.5 : 0.5);
-            if (!isSel && codeSelection) {
-                paths.filter(p => p.properties.code === codeSelection).raise();
-            }
+            d3.select(this).attr("stroke", isSel ? "#000" : "white").attr("stroke-width", isSel ? 2.5 : 0.5);
+            if (!isSel && codeSelection) paths.filter(p => p.properties.code === codeSelection).raise();
             hideTooltip();
         });
 
-    // Create bar chart
-    const chart = Plot.plot({
-        title: "Top 15 des départements les plus ensoleillés (en h/an)",
-        marginLeft: 140,
-        width: widthChart,
-        height: heightChart,
-        x: {
-            label: "Heures d'ensoleillement",
-            grid: true,
-            tickFormat: "s"
-        },
-        y: {
-            label: null
-        },
+    const barChart = Plot.plot({
+        title: "Top 15 : Ensoleillement (h/an)",
+        marginLeft: 140, width: widthChart, height: heightChart,
+        x: { label: "h/an", grid: true, tickFormat: "s" },
+        y: { label: null },
         marks: [
             Plot.barX(dataSoleil, {
-                x: "heures_soleil",
-                y: "nom_dept",
-                sort: { y: "x", reverse: true, limit: 15 },
-                fill: d => {
-                    const codeCurrent = String(d.code_dept).padStart(2, '0');
-                    return codeCurrent === codeSelection ? "#d32f2f" : "#f39c12";
-                },
-                title: d => `${d.nom_dept}\n${d.heures_soleil.toLocaleString()} h/an`
+                x: "heures_soleil", y: "nom_dept",
+                fill: d => String(d.code_dept).padStart(2, '0') === codeSelection ? "#d32f2f" : "#f39c12",
+                sort: { y: "x", reverse: true, limit: 15 }
             }),
             Plot.text(dataSoleil, {
-                x: "heures_soleil",
-                y: "nom_dept",
+                x: "heures_soleil", y: "nom_dept",
                 text: d => (d.heures_soleil / 1000).toFixed(1) + "k",
-                textAnchor: "start",
-                dx: 5,
-                fill: "#666",
-                fontSize: 10,
+                textAnchor: "start", dx: 5, fill: "#666", fontSize: 10,
                 sort: { y: "x", reverse: true, limit: 15 }
             })
         ]
     });
 
-    // Assemble the dashboard
-    const div = document.createElement("div");
-    div.style.display = "flex";
-    div.style.alignItems = "flex-start";
-    div.style.gap = "20px";
+    const histChart = renderDistributionChart(
+        dataSoleil, "heures_soleil", "h/an", "#f39c12", totalWidth, 220,
+        "Répartition des départements par ensoleillement"
+    );
 
-    const left = document.createElement("div");
-    left.style.display = "flex";
-    left.style.flexDirection = "column";
-    left.appendChild(svgMap.node());
-    appendMapLegend(left, colorScaleMap, [0, maxVal], "Ensoleillement (h/an)", d => Math.round(d) + "h");
-    appendMapSource(left, "linternaute.com", "https://www.petitlopin.fr/?map=ensoleillement");
+    const wrapper = document.createElement("div");
+    wrapper.style.cssText = "display:flex; flex-direction:column; gap:16px;";
 
-    const right = document.createElement("div");
-    right.appendChild(chart);
+    const topRow = document.createElement("div");
+    topRow.style.cssText = "display:flex; align-items:flex-start; gap:20px;";
 
-    div.appendChild(left);
-    div.appendChild(right);
+    const leftCol = document.createElement("div");
+    leftCol.style.cssText = "display:flex; flex-direction:column;";
+    leftCol.appendChild(svgMap.node());
+    appendMapLegend(leftCol, colorScaleMap, [0, maxVal], "Ensoleillement (h/an)", d => Math.round(d) + "h");
 
-    // Update container
+    const rightCol = document.createElement("div");
+    rightCol.appendChild(barChart);
+
+    topRow.appendChild(leftCol);
+    topRow.appendChild(rightCol);
+
+    const bottomRow = document.createElement("div");
+    bottomRow.appendChild(histChart);
+    appendMapSource(bottomRow, "linternaute.com", "https://www.petitlopin.fr/?map=ensoleillement");
+
+
+    wrapper.appendChild(topRow);
+    wrapper.appendChild(bottomRow);
+
     const dashboardContainer = document.getElementById('sunshine-dashboard');
     dashboardContainer.innerHTML = '';
-    dashboardContainer.appendChild(div);
+    dashboardContainer.appendChild(wrapper);
 }
 
-// Render Topography Dashboard
-function renderTopographyDashboard() {
-    if (!dataTopo || !departments) {
-        document.getElementById('topography-dashboard').innerHTML = 
-            '<div class="loading">Chargement des données topographiques...</div>';
-        return;
-    }
+// ─── Generic Topo Dashboard ───────────────────────────────────────────────────
+function renderTopoDashboard(metric) {
+    const containerIds = { pente: 'pente-dashboard', exposition: 'orientation-dashboard', altitude: 'altitude-dashboard' };
+    const containerId = containerIds[metric];
+    if (!dataTopo || !departments) return;
 
-    const widthMap = 500;
-    const heightMap = 500;
-    const widthChart = 500;
-    const heightChart = 500;
-    
-    const selection = departementSelectionne;
-    const codeSelection = selection ? selection.code : null;
-    const metric = metricTopo;
+    const widthMap = 500, heightMap = 500, widthChart = 420, heightChart = 460;
+    const totalWidth = widthMap + widthChart + 20;
+    const codeSelection = departementSelectionne;
 
-    // Create a map of department codes to names from GeoJSON
     const deptNamesMap = new Map();
-    departments.features.forEach(feature => {
-        deptNamesMap.set(feature.properties.code, feature.properties.nom);
-    });
-
-    // Enrich topography data with department names
-    const enrichedDataTopo = dataTopo.map(d => ({
+    departments.features.forEach(f => deptNamesMap.set(f.properties.code, f.properties.nom));
+    const enriched = dataTopo.map(d => ({
         ...d,
         nom_dept: deptNamesMap.get(String(d.code_dep).padStart(2, '0')) || `Dept ${d.code_dep}`
     }));
 
-    // Create SVG for map
-    const svgMap = d3.create("svg")
-        .attr("width", widthMap)
-        .attr("height", heightMap)
-        .attr("viewBox", [0, 0, widthMap, heightMap]);
+    const configs = {
+        pente:      { interpolator: d3.interpolateReds,   domainMax: 15,   label: "Pente",      unit: "%",  color: "#d32f2f", title: "Top 15 : Pente moyenne (%)" },
+        altitude:   { interpolator: d3.interpolateGnBu,   domainMax: null, label: "Altitude",   unit: "m",  color: "#1976d2", title: "Top 15 : Altitude moyenne (m)" },
+        exposition: { interpolator: d3.interpolateYlOrBr, domainMax: 360,  label: "Exposition", unit: "°",  color: "#f57c00", title: "Exposition des vignes (rosace)" }
+    };
 
-    const projection = d3.geoConicConformal()
-        .center([2.454071, 46.279229])
-        .scale(2600)
-        .translate([widthMap / 2, heightMap / 2]);
+    const cfg = configs[metric];
+    const domainMax = cfg.domainMax || d3.max(enriched, d => d[metric]) || 100;
+    const colorScale = d3.scaleSequential([0, domainMax], cfg.interpolator);
+
+    // ── Map ──
+    const svgMap = d3.create("svg").attr("width", widthMap).attr("height", heightMap).attr("viewBox", [0, 0, widthMap, heightMap]);
+    const projection = d3.geoConicConformal().center([2.454071, 46.279229]).scale(2600).translate([widthMap / 2, heightMap / 2]);
     const path = d3.geoPath().projection(projection);
 
-    // Adapt scale based on metric
-    let colorInterpolator;
-    let domainMax;
-    let chartTitle;
-    let unit = "";
-    let barColor;
-
-    const maxValue = d3.max(enrichedDataTopo, d => d[metric]) || 100;
-
-    if (metric === "pente") {
-        colorInterpolator = d3.interpolateReds;
-        domainMax = 15;
-        chartTitle = "Top 15 : Pente moyenne";
-        unit = "%";
-        barColor = "#d32f2f";
-    } else if (metric === "altitude") {
-        colorInterpolator = d3.interpolateGnBu;
-        domainMax = maxValue;
-        chartTitle = "Top 15 : Altitude moyenne";
-        unit = "m";
-        barColor = "#1976d2";
-    } else {
-        colorInterpolator = d3.interpolateYlOrBr;
-        domainMax = 360;
-        chartTitle = "Top 15 : Exposition";
-        unit = "°";
-        barColor = "#f57c00";
-    }
-
-    const colorScale = d3.scaleSequential()
-        .domain([0, domainMax])
-        .interpolator(colorInterpolator);
-
     const geojson = JSON.parse(JSON.stringify(departments));
-
     for (const feature of geojson.features) {
         const depCode = feature.properties.code;
-        const row = enrichedDataTopo.find(d => String(d.code_dep).padStart(2, '0') === depCode);
-        feature.properties.topoData = row || null;
+        const row = enriched.find(d => String(d.code_dep).padStart(2, '0') === depCode);
         feature.properties.value = row ? row[metric] : 0;
     }
 
     const g = svgMap.append("g");
 
     if (metric === "exposition") {
-        // Draw departments as neutral grey fill
-        const paths = g.selectAll("path")
-            .data(geojson.features)
-            .join("path")
+        const paths = g.selectAll("path").data(geojson.features).join("path")
             .attr("d", path)
             .attr("fill", d => d.properties.value > 0 ? "#e8e0d0" : "#eee")
             .attr("stroke", d => d.properties.code === codeSelection ? "#000" : "white")
             .attr("stroke-width", d => d.properties.code === codeSelection ? 2.5 : 0.5)
             .attr("cursor", "pointer")
-            .on("click", (event, d) => {
-                departementSelectionne = d.properties;
-                renderProductionDashboard();
-                renderSunshineDashboard();
-                renderTopographyDashboard();
-            })
+            .on("click", (e, d) => { setDepartement(d.properties.code); })
             .on("mouseover", function(e, d) {
                 d3.select(this).attr("stroke", "#333").attr("stroke-width", 2).raise();
                 g.selectAll(".arrow-group").raise();
-                const val = d.properties.value;
-                showTooltip(e, `
-                    <strong>${d.properties.nom}</strong><br>
-                    Exposition : <strong>${Math.round(val)}° (${expositionToCardinal(val)})</strong>
-                `);
+                showTooltip(e, `<strong>${d.properties.nom}</strong><br>Exposition : <strong>${Math.round(d.properties.value)}° (${expositionToCardinal(d.properties.value)})</strong>`);
             })
             .on("mousemove", moveTooltip)
             .on("mouseout", function(e, d) {
                 const isSel = d.properties.code === codeSelection;
-                d3.select(this).attr("stroke", isSel ? "#000" : "white")
-                    .attr("stroke-width", isSel ? 2.5 : 0.5);
-                if (!isSel && codeSelection) {
-                    paths.filter(p => p.properties.code === codeSelection).raise();
-                }
+                d3.select(this).attr("stroke", isSel ? "#000" : "white").attr("stroke-width", isSel ? 2.5 : 0.5);
                 g.selectAll(".arrow-group").raise();
                 hideTooltip();
             });
-        paths.filter(d => d.properties.code === codeSelection).raise();
 
-
-        // Draw arrows on each department centroid
         geojson.features.forEach(feature => {
             if (!feature.properties.value) return;
-
             const centroid = path.centroid(feature);
             if (isNaN(centroid[0]) || isNaN(centroid[1])) return;
-
             const angleDeg = feature.properties.value;
-            // Convert exposition angle to SVG rotation
-            // 0° = North = up, clockwise
             const angleRad = (angleDeg - 90) * Math.PI / 180;
-
             const isSelected = feature.properties.code === codeSelection;
             const arrowLen = isSelected ? 14 : 10;
             const color = isSelected ? "#d32f2f" : "#555";
             const strokeW = isSelected ? 2.5 : 1.5;
-
-            const arrowGroup = g.append("g")
-                .attr("class", "arrow-group")
-                .attr("transform", `translate(${centroid[0]}, ${centroid[1]})`)
-                .attr("cursor", "pointer")
-                .on("click", (event) => {
-                    departementSelectionne = feature.properties;
-                    renderProductionDashboard();
-                    renderSunshineDashboard();
-                    renderTopographyDashboard();
-                })
-                .on("mouseover", (e) => {
-                    const val = feature.properties.value;
-                    showTooltip(e, `
-                        <strong>${feature.properties.nom}</strong><br>
-                        Exposition : <strong>${Math.round(val)}° (${expositionToCardinal(val)})</strong>
-                    `);
-                })
-                .on("mousemove", moveTooltip)
-                .on("mouseout", hideTooltip);
-
-            // Arrow shaft
-            const dx = Math.cos(angleRad) * arrowLen;
-            const dy = Math.sin(angleRad) * arrowLen;
-
-            arrowGroup.append("line")
-                .attr("x1", -dx * 0.4)
-                .attr("y1", -dy * 0.4)
-                .attr("x2", dx * 0.8)
-                .attr("y2", dy * 0.8)
-                .attr("stroke", color)
-                .attr("stroke-width", strokeW)
-                .attr("stroke-linecap", "round");
-
-            // Arrowhead
-            const headLen = arrowLen * 0.45;
-            const headAngle = 0.45;
-            const tipX = dx * 0.8;
-            const tipY = dy * 0.8;
-
-            const leftX = tipX - headLen * Math.cos(angleRad - headAngle);
-            const leftY = tipY - headLen * Math.sin(angleRad - headAngle);
-            const rightX = tipX - headLen * Math.cos(angleRad + headAngle);
-            const rightY = tipY - headLen * Math.sin(angleRad + headAngle);
-
-            arrowGroup.append("polygon")
-                .attr("points", `${tipX},${tipY} ${leftX},${leftY} ${rightX},${rightY}`)
-                .attr("fill", color);
-
-            // Tooltip
-            arrowGroup.append("title")
-                .text(`${feature.properties.nom}\nExposition : ${Math.round(angleDeg)}° (${expositionToCardinal(angleDeg)})`);
+            const arrowGroup = g.append("g").attr("class", "arrow-group")
+                .attr("transform", `translate(${centroid[0]}, ${centroid[1]})`).attr("cursor", "pointer")
+                .on("click", () => { setDepartement(feature.properties.code); })
+                .on("mouseover", e => showTooltip(e, `<strong>${feature.properties.nom}</strong><br>Exposition : <strong>${Math.round(angleDeg)}° (${expositionToCardinal(angleDeg)})</strong>`))
+                .on("mousemove", moveTooltip).on("mouseout", hideTooltip);
+            const dx = Math.cos(angleRad) * arrowLen, dy = Math.sin(angleRad) * arrowLen;
+            arrowGroup.append("line").attr("x1", -dx * 0.4).attr("y1", -dy * 0.4).attr("x2", dx * 0.8).attr("y2", dy * 0.8)
+                .attr("stroke", color).attr("stroke-width", strokeW).attr("stroke-linecap", "round");
+            const headLen = arrowLen * 0.45, headAngle = 0.45;
+            const tipX = dx * 0.8, tipY = dy * 0.8;
+            const lx = tipX - headLen * Math.cos(angleRad - headAngle), ly = tipY - headLen * Math.sin(angleRad - headAngle);
+            const rx = tipX - headLen * Math.cos(angleRad + headAngle), ry = tipY - headLen * Math.sin(angleRad + headAngle);
+            arrowGroup.append("polygon").attr("points", `${tipX},${tipY} ${lx},${ly} ${rx},${ry}`).attr("fill", color);
         });
-    }
-    else {    
-        const paths = g.selectAll("path")
-            .data(geojson.features)
-            .join("path")
+    } else {
+        const paths = g.selectAll("path").data(geojson.features).join("path")
             .attr("d", path)
             .attr("fill", d => d.properties.value > 0 ? colorScale(d.properties.value) : "#eee")
-            .attr("stroke", "white")
-            .attr("stroke-width", 0.5)
-            .attr("cursor", "pointer");
-
-        paths.filter(d => d.properties.code === codeSelection)
-            .attr("stroke", "#000")
-            .attr("stroke-width", 2.5)
-            .raise();
-
-        paths
-            .on("click", (event, d) => {
-                departementSelectionne = d.properties;
-                renderProductionDashboard();
-                renderSunshineDashboard();
-                renderTopographyDashboard();
-            })
+            .attr("stroke", "white").attr("stroke-width", 0.5).attr("cursor", "pointer");
+        paths.filter(d => d.properties.code === codeSelection).attr("stroke", "#000").attr("stroke-width", 2.5).raise();
+        paths.on("click", (e, d) => { setDepartement(d.properties.code); })
             .on("mouseover", function(e, d) {
                 d3.select(this).attr("stroke", "#333").attr("stroke-width", 2).raise();
-                const val = d.properties.value;
-                const formatted = metric === "altitude"
-                    ? `${Math.round(val)} m`
-                    : `${val.toFixed(1)} %`;
-                showTooltip(e, `
-                    <strong>${d.properties.nom}</strong><br>
-                    ${metric === "altitude" ? "Altitude" : "Pente"} : <strong>${formatted}</strong>
-                `);
+                showTooltip(e, `<strong>${d.properties.nom}</strong><br>${cfg.label} : <strong>${d.properties.value.toFixed(1)} ${cfg.unit}</strong>`);
             })
             .on("mousemove", moveTooltip)
             .on("mouseout", function(e, d) {
                 const isSel = d.properties.code === codeSelection;
-                d3.select(this).attr("stroke", isSel ? "#000" : "white")
-                    .attr("stroke-width", isSel ? 2.5 : 0.5);
-                if (!isSel && codeSelection) {
-                    paths.filter(p => p.properties.code === codeSelection).raise();
-                }
+                d3.select(this).attr("stroke", isSel ? "#000" : "white").attr("stroke-width", isSel ? 2.5 : 0.5);
+                if (!isSel && codeSelection) paths.filter(p => p.properties.code === codeSelection).raise();
                 hideTooltip();
             });
     }
 
-    // Create bar chart for topography
-    const topData = enrichedDataTopo
-        .filter(d => d[metric] > 0)
-        .sort((a, b) => d3.descending(a[metric], b[metric]))
-        .slice(0, 15);
-
-    let chart;
+    // ── Right chart: top15 or rose ──
+    let mainChart;
     if (metric === "exposition") {
-        chart = renderExpositionRoseChart(enrichedDataTopo, codeSelection, widthChart, heightChart);
+        mainChart = renderExpositionRoseChart(enriched, codeSelection, widthChart, heightChart);
     } else {
-        chart = Plot.plot({
-            title: chartTitle,
-            marginLeft: 140,
-            width: widthChart,
-            height: heightChart,
-            x: {
-                label: unit,
-                grid: true,
-                tickFormat: "s"
-            },
-            y: {
-                label: null
-            },
+        const topData = [...enriched].filter(d => d[metric] > 0).sort((a, b) => d3.descending(a[metric], b[metric])).slice(0, 15);
+        mainChart = Plot.plot({
+            title: cfg.title, marginLeft: 140, width: widthChart, height: heightChart,
+            x: { label: cfg.unit, grid: true },
+            y: { label: null },
             marks: [
                 Plot.barX(topData, {
-                    x: metric,
-                    y: "nom_dept",
-                    sort: { y: "x", reverse: true },
-                    fill: d => {
-                        const codeCurrent = String(d.code_dep).padStart(2, '0');
-                        return codeCurrent === codeSelection ? "#222" : barColor;
-                    },
-                    title: d => `${d.nom_dept}\n${Math.round(d[metric] * 10) / 10} ${unit}`
+                    x: metric, y: "nom_dept",
+                    fill: d => String(d.code_dep).padStart(2, '0') === codeSelection ? "#222" : cfg.color,
+                    sort: { y: "x", reverse: true }
                 }),
                 Plot.text(topData, {
-                    x: metric,
-                    y: "nom_dept",
-                    text: d => {
-                        const val = d[metric];
-                        if (metric === "exposition") {
-                            return Math.round(val) + "°";
-                        } else if (metric === "altitude") {
-                            return Math.round(val) + "m";
-                        } else {
-                            return val.toFixed(1) + "%";
-                        }
-                    },
-                    textAnchor: "start",
-                    dx: 5,
-                    fill: "#666",
-                    fontSize: 10
+                    x: metric, y: "nom_dept",
+                    text: d => metric === "altitude" ? Math.round(d[metric]) + "m" : d[metric].toFixed(1) + cfg.unit,
+                    textAnchor: "start", dx: 5, fill: "#666", fontSize: 10
                 })
             ]
         });
     }
 
-    // Assemble the dashboard
-    const div = document.createElement("div");
-    div.style.display = "flex";
-    div.style.alignItems = "flex-start";
-    div.style.gap = "20px";
+    // ── Bottom: histogram (full width) ──
+    const histChart = metric !== "exposition"
+        ? renderDistributionChart(enriched, metric, cfg.unit, cfg.color, totalWidth, 220,
+            `Répartition des départements par ${cfg.label.toLowerCase()}`)
+        : null;
 
-    const left = document.createElement("div");
-    left.style.display = "flex";
-    left.style.flexDirection = "column";
-    left.appendChild(svgMap.node());
+    // ── Layout ──
+    const wrapper = document.createElement("div");
+    wrapper.style.cssText = "display:flex; flex-direction:column; gap:16px;";
+
+    const topRow = document.createElement("div");
+    topRow.style.cssText = "display:flex; align-items:flex-start; gap:20px;";
+
+    const leftCol = document.createElement("div");
+    leftCol.style.cssText = "display:flex; flex-direction:column;";
+    leftCol.appendChild(svgMap.node());
 
     if (metric !== "exposition") {
-        const legendLabel = metric === "altitude" ? "Altitude (m)" : "Pente (%)";
-        const legendFormat = metric === "altitude"
-            ? d => Math.round(d) + "m"
-            : d => d.toFixed(1) + "%";
-        appendMapLegend(left, colorScale, [0, domainMax], legendLabel, legendFormat);
+        appendMapLegend(leftCol, colorScale, [0, domainMax], `${cfg.label} (${cfg.unit})`,
+            d => metric === "altitude" ? Math.round(d) + "m" : d.toFixed(1) + cfg.unit);
     } else {
         const compassDiv = document.createElement("div");
         compassDiv.style.cssText = "font-size:11px; color:#555; margin-top:6px;";
         compassDiv.innerHTML = `<strong>Légende :</strong> chaque flèche indique l'exposition solaire moyenne des vignes du département`;
-        left.appendChild(compassDiv);
+        leftCol.appendChild(compassDiv);
     }
-    appendMapSource(left, "INRAE", "https://entrepot.recherche.data.gouv.fr/dataset.xhtml?persistentId=doi:10.57745/KBTLDH");
 
-    const right = document.createElement("div");
-    right.appendChild(chart);
+    const rightCol = document.createElement("div");
+    rightCol.appendChild(mainChart);
 
-    div.appendChild(left);
-    div.appendChild(right);
+    topRow.appendChild(leftCol);
+    topRow.appendChild(rightCol);
 
-    // Update container
-    const dashboardContainer = document.getElementById('topography-dashboard');
+    wrapper.appendChild(topRow);
+
+    if (histChart) {
+        const bottomRow = document.createElement("div");
+        bottomRow.appendChild(histChart);
+        appendMapSource(bottomRow, "INRAE", "https://entrepot.recherche.data.gouv.fr/dataset.xhtml?persistentId=doi:10.57745/KBTLDH");
+        wrapper.appendChild(bottomRow);
+    } else {
+        appendMapSource(leftCol, "INRAE", "https://entrepot.recherche.data.gouv.fr/dataset.xhtml?persistentId=doi:10.57745/KBTLDH");
+    }
+
+    const dashboardContainer = document.getElementById(containerId);
     dashboardContainer.innerHTML = '';
-    dashboardContainer.appendChild(div);
+    dashboardContainer.appendChild(wrapper);
 }
+
 
 // Helper: convert degrees to cardinal direction
 function expositionToCardinal(deg) {
@@ -1014,8 +859,7 @@ function renderImpactDashboard() {
         return;
     }
 
-    const selection = departementSelectionne; 
-    const codeSelection = selection ? selection.code : null;
+    const codeSelection = departementSelectionne;
     const metric = facteurX;
 
     const width = 1000;
@@ -1173,24 +1017,16 @@ function renderImpactDashboard() {
     pathsRendement.filter(d => String(d.properties.code).padStart(2, '0') === codeSelection)
         .attr("stroke", "#000").attr("stroke-width", 2.5).raise();
 
-    pathsRendement.on("click", (e, d) => { 
-            departementSelectionne = {
-                code: String(d.properties.code).padStart(2, '0'),
-                nom: d.properties.nom
-            };
-            renderProductionDashboard();
-            renderSunshineDashboard();
-            renderTopographyDashboard();
-            renderImpactDashboard();
-        })
+    pathsRendement.on("click", (e, d) => { setDepartement(d.properties.code); })
         .on("mouseover", function(e, d) {
             d3.select(this).attr("stroke", "#333").attr("stroke-width", 2.5).raise();
             const info = d.properties.info;
+            const depCode = String(d.properties.code).padStart(2, '0');
             if (info) {
                 showTooltip(e, `
                     <strong>${d.properties.nom}</strong><br>
-                    Rendement : <strong>${Math.round(d.properties.value)} hl/ha</strong><br>
-                    ${metricConfig.label} : <strong>${Math.round(info[metric])} ${metricConfig.unit}</strong><br>
+                    Rendement : <strong>${Math.round(info.rendement)} hl/ha</strong><br>
+                    ${metricConfig.label} : <strong>${Math.round(info[metric])}${metricConfig.unit}</strong><br>
                     Surface : <strong>${Math.round(info.surface).toLocaleString()} ha</strong>
                 `);
             } else {
@@ -1260,15 +1096,20 @@ function renderImpactDashboard() {
     pathsFactor.filter(d => String(d.properties.code).padStart(2, '0') === codeSelection)
         .attr("stroke", "#000").attr("stroke-width", 2.5).raise();
 
-    pathsFactor.on("click", (e, d) => { 
-            departementSelectionne = {
-                code: String(d.properties.code).padStart(2, '0'),
-                nom: d.properties.nom
-            };
-            renderProductionDashboard();
-            renderSunshineDashboard();
-            renderTopographyDashboard();
-            renderImpactDashboard();
+    pathsFactor.on("click", (e, d) => { setDepartement(d.properties.code); })
+        .on("mouseover", function(e, d) {
+            d3.select(this).attr("stroke", "#333").attr("stroke-width", 2.5).raise();
+            const info = d.properties.info;
+            if (info) {
+                showTooltip(e, `
+                    <strong>${d.properties.nom}</strong><br>
+                    Rendement : <strong>${Math.round(info.rendement)} hl/ha</strong><br>
+                    ${metricConfig.label} : <strong>${Math.round(info[metric])}${metricConfig.unit}</strong><br>
+                    Surface : <strong>${Math.round(info.surface).toLocaleString()} ha</strong>
+                `);
+            } else {
+                showTooltip(e, `<strong>${d.properties.nom}</strong><br><em>Données indisponibles</em>`);
+            }
         })
         .on("mouseover", function(e, d) {
             d3.select(this).attr("stroke", "#333").attr("stroke-width", 2.5).raise();
@@ -1454,15 +1295,9 @@ document.getElementById('wineType').addEventListener('change', (e) => {
     renderProductionDashboard();
 });
 
-document.getElementById('topoMetric').addEventListener('change', (e) => {
-    metricTopo = e.target.value;
-    renderTopographyDashboard();
-});
-
 document.getElementById('impactFactor').addEventListener('change', (e) => {
     facteurX = e.target.value;
     renderImpactDashboard();
 });
 
-// Load data on page load
 loadData();
