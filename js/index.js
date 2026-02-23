@@ -8,6 +8,52 @@ let choixVin = 'total_prod';
 let metricTopo = 'altitude';
 let facteurX = 'soleil';
 
+
+const tooltip = d3.select("body").append("div")
+    .attr("id", "map-tooltip")
+    .style("position", "fixed")
+    .style("background", "rgba(255,255,255,0.97)")
+    .style("border", "1px solid #ddd")
+    .style("border-radius", "6px")
+    .style("padding", "10px 14px")
+    .style("font-size", "13px")
+    .style("font-family", "sans-serif")
+    .style("color", "#333")
+    .style("box-shadow", "0 2px 8px rgba(0,0,0,0.15)")
+    .style("pointer-events", "none")
+    .style("display", "none")
+    .style("z-index", "9999")
+    .style("max-width", "220px")
+    .style("line-height", "1.6");
+
+function showTooltip(event, html) {
+    tooltip
+        .style("display", "block")
+        .html(html);
+    moveTooltip(event);
+}
+
+function moveTooltip(event) {
+    const tw = tooltip.node().offsetWidth;
+    const th = tooltip.node().offsetHeight;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+
+    let x = event.clientX + 14;
+    let y = event.clientY + 14;
+
+    // Flip left if overflowing right
+    if (x + tw > vw - 10) x = event.clientX - tw - 14;
+    // Flip up if overflowing bottom
+    if (y + th > vh - 10) y = event.clientY - th - 14;
+
+    tooltip.style("left", x + "px").style("top", y + "px");
+}
+
+function hideTooltip() {
+    tooltip.style("display", "none");
+}
+
 // Load all data
 async function loadData() {
     try {
@@ -191,8 +237,13 @@ function renderProductionDashboard() {
             renderSunshineDashboard();
             renderTopographyDashboard();
         })
-        .on("mouseover", function() {
+        .on("mouseover", function(e, d) {
             d3.select(this).attr("stroke", "#333").attr("stroke-width", 2).raise();
+            const val = d.properties.value;
+            showTooltip(e, `
+                <strong>${d.properties.nom}</strong><br>
+                ${titleLabel} : <strong>${Math.round(val).toLocaleString()} hl</strong>
+            `);
         })
         .on("mouseout", function(e, d) {
             const isSel = d.properties.code === codeSelection;
@@ -201,9 +252,8 @@ function renderProductionDashboard() {
             if (!isSel && codeSelection) {
                 paths.filter(p => p.properties.code === codeSelection).raise();
             }
+            hideTooltip();
         })
-        .append("title")
-        .text(d => `${d.properties.nom}\n${titleLabel} : ${Math.round(d.properties.value).toLocaleString()} hl`);
 
     // Create bar chart
     const topData = [...dataProd]
@@ -319,9 +369,14 @@ function renderSunshineDashboard() {
             renderSunshineDashboard();
             renderTopographyDashboard();
         })
-        .on("mouseover", function() {
+        .on("mouseover", function(e, d) {
             d3.select(this).attr("stroke", "#333").attr("stroke-width", 2).raise();
+            showTooltip(e, `
+                <strong>${d.properties.nom}</strong><br>
+                Ensoleillement : <strong>${Math.round(d.properties.value).toLocaleString()} h/an</strong>
+            `);
         })
+        .on("mousemove", moveTooltip)
         .on("mouseout", function(e, d) {
             const isSel = d.properties.code === codeSelection;
             d3.select(this).attr("stroke", isSel ? "#000" : "white")
@@ -329,9 +384,8 @@ function renderSunshineDashboard() {
             if (!isSel && codeSelection) {
                 paths.filter(p => p.properties.code === codeSelection).raise();
             }
-        })
-        .append("title")
-        .text(d => `${d.properties.nom}\nEnsoleillement : ${Math.round(d.properties.value).toLocaleString()} h/an`);
+            hideTooltip();
+        });
 
     // Create bar chart
     const chart = Plot.plot({
@@ -498,17 +552,25 @@ function renderTopographyDashboard() {
                 renderTopographyDashboard();
             })
             .on("mouseover", function(e, d) {
-                if (d.properties.code === codeSelection) return;
-                d3.select(this)
-                    .attr("stroke", "#333")
-                    .attr("stroke-width", 1.5);
+                d3.select(this).attr("stroke", "#333").attr("stroke-width", 2).raise();
+                g.selectAll(".arrow-group").raise();
+                const val = d.properties.value;
+                showTooltip(e, `
+                    <strong>${d.properties.nom}</strong><br>
+                    Exposition : <strong>${Math.round(val)}° (${expositionToCardinal(val)})</strong>
+                `);
             })
+            .on("mousemove", moveTooltip)
             .on("mouseout", function(e, d) {
-                if (d.properties.code === codeSelection) return;
-                d3.select(this)
-                    .attr("stroke", "white")
-                    .attr("stroke-width", 0.5);
-            })
+                const isSel = d.properties.code === codeSelection;
+                d3.select(this).attr("stroke", isSel ? "#000" : "white")
+                    .attr("stroke-width", isSel ? 2.5 : 0.5);
+                if (!isSel && codeSelection) {
+                    paths.filter(p => p.properties.code === codeSelection).raise();
+                }
+                g.selectAll(".arrow-group").raise();
+                hideTooltip();
+            });
         paths.filter(d => d.properties.code === codeSelection).raise();
 
 
@@ -538,8 +600,16 @@ function renderTopographyDashboard() {
                     renderProductionDashboard();
                     renderSunshineDashboard();
                     renderTopographyDashboard();
-                });
-
+                })
+                .on("mouseover", (e) => {
+                    const val = feature.properties.value;
+                    showTooltip(e, `
+                        <strong>${feature.properties.nom}</strong><br>
+                        Exposition : <strong>${Math.round(val)}° (${expositionToCardinal(val)})</strong>
+                    `);
+                })
+                .on("mousemove", moveTooltip)
+                .on("mouseout", hideTooltip);
 
             // Arrow shaft
             const dx = Math.cos(angleRad) * arrowLen;
@@ -596,9 +666,18 @@ function renderTopographyDashboard() {
                 renderSunshineDashboard();
                 renderTopographyDashboard();
             })
-            .on("mouseover", function() {
+            .on("mouseover", function(e, d) {
                 d3.select(this).attr("stroke", "#333").attr("stroke-width", 2).raise();
+                const val = d.properties.value;
+                const formatted = metric === "altitude"
+                    ? `${Math.round(val)} m`
+                    : `${val.toFixed(1)} %`;
+                showTooltip(e, `
+                    <strong>${d.properties.nom}</strong><br>
+                    ${metric === "altitude" ? "Altitude" : "Pente"} : <strong>${formatted}</strong>
+                `);
             })
+            .on("mousemove", moveTooltip)
             .on("mouseout", function(e, d) {
                 const isSel = d.properties.code === codeSelection;
                 d3.select(this).attr("stroke", isSel ? "#000" : "white")
@@ -606,11 +685,7 @@ function renderTopographyDashboard() {
                 if (!isSel && codeSelection) {
                     paths.filter(p => p.properties.code === codeSelection).raise();
                 }
-            })
-            .append("title")
-            .text(d => {
-                const val = d.properties.value ? Math.round(d.properties.value * 10) / 10 : "N/A";
-                return `${d.properties.nom}\n${metric.charAt(0).toUpperCase() + metric.slice(1)} : ${val} ${unit}`;
+                hideTooltip();
             });
     }
 
@@ -814,8 +889,6 @@ function renderExpositionRoseChart(data, codeSelection, width, height) {
     });
 
     // Draw petals
-    const angleStep = (2 * Math.PI) / numBins;
-
     bins.forEach((bin, i) => {
         if (bin.count === 0) return;
 
@@ -980,18 +1053,28 @@ function renderImpactDashboard() {
             renderTopographyDashboard();
             renderImpactDashboard();
         })
-        .on("mouseover", function() { 
-            d3.select(this).attr("stroke", "#333").attr("stroke-width", 2.5).raise(); 
+        .on("mouseover", function(e, d) {
+            d3.select(this).attr("stroke", "#333").attr("stroke-width", 2.5).raise();
+            const info = d.properties.info;
+            if (info) {
+                showTooltip(e, `
+                    <strong>${d.properties.nom}</strong><br>
+                    Rendement : <strong>${Math.round(d.properties.value)} hl/ha</strong><br>
+                    ${labels[metric]} : <strong>${Math.round(info[metric])}</strong><br>
+                    Surface : <strong>${Math.round(info.surface).toLocaleString()} ha</strong>
+                `);
+            } else {
+                showTooltip(e, `<strong>${d.properties.nom}</strong><br><em>Données indisponibles</em>`);
+            }
         })
+        .on("mousemove", moveTooltip)
         .on("mouseout", function(e, d) {
             const isSel = d.properties.code === codeSelection;
-            d3.select(this).attr("stroke", isSel ? "#000" : "white").attr("stroke-width", isSel ? 2.5 : 0.5);
+            d3.select(this).attr("stroke", isSel ? "#000" : "white")
+                .attr("stroke-width", isSel ? 2.5 : 0.5);
             if (!isSel && codeSelection) paths.filter(p => p.properties.code === codeSelection).raise();
-        })
-        .append("title")
-        .text(d => d.properties.info 
-            ? `${d.properties.nom}\nRendement: ${Math.round(d.properties.value)} hl/ha\n${metric}: ${Math.round(d.properties.info[metric])}`
-            : d.properties.nom);
+            hideTooltip();
+        });
 
     svgMap.append("text")
         .attr("x", 20)
