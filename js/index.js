@@ -33,6 +33,93 @@ async function loadData() {
     }
 }
 
+function appendMapLegend(containerDiv, colorScale, domain, label, format = d => Math.round(d)) {
+    const legendWidth = 200;
+    const legendHeight = 12;
+    const margin = { left: 10, right: 10, top: 20, bottom: 20 };
+
+    const totalWidth = legendWidth + margin.left + margin.right;
+    const totalHeight = legendHeight + margin.top + margin.bottom;
+
+    const svgLegend = d3.create("svg")
+        .attr("width", totalWidth)
+        .attr("height", totalHeight);
+
+    const defs = svgLegend.append("defs");
+    const gradientId = "legend-gradient-" + Math.random().toString(36).substr(2, 9);
+    const gradient = defs.append("linearGradient")
+        .attr("id", gradientId)
+        .attr("x1", "0%").attr("x2", "100%");
+
+    const steps = 10;
+    d3.range(steps + 1).forEach(i => {
+        const t = i / steps;
+        gradient.append("stop")
+            .attr("offset", `${t * 100}%`)
+            .attr("stop-color", colorScale(domain[0] + t * (domain[1] - domain[0])));
+    });
+
+    const g = svgLegend.append("g")
+        .attr("transform", `translate(${margin.left}, ${margin.top})`);
+
+    // Label above the bar
+    g.append("text")
+        .attr("x", legendWidth / 2)
+        .attr("y", -6)
+        .attr("font-size", 11)
+        .attr("font-weight", "bold")
+        .attr("fill", "#333")
+        .attr("text-anchor", "middle")
+        .text(label);
+
+    // Gradient bar
+    g.append("rect")
+        .attr("width", legendWidth)
+        .attr("height", legendHeight)
+        .attr("rx", 2)
+        .style("fill", `url(#${gradientId})`);
+
+    // Tick labels below the bar
+    g.append("text")
+        .attr("x", 0)
+        .attr("y", legendHeight + 14)
+        .attr("font-size", 10)
+        .attr("fill", "#555")
+        .attr("text-anchor", "start")
+        .text(format(domain[0]));
+
+    g.append("text")
+        .attr("x", legendWidth / 2)
+        .attr("y", legendHeight + 14)
+        .attr("font-size", 10)
+        .attr("fill", "#555")
+        .attr("text-anchor", "middle")
+        .text(format((domain[0] + domain[1]) / 2));
+
+    g.append("text")
+        .attr("x", legendWidth)
+        .attr("y", legendHeight + 14)
+        .attr("font-size", 10)
+        .attr("fill", "#555")
+        .attr("text-anchor", "end")
+        .text(format(domain[1]));
+
+    containerDiv.appendChild(svgLegend.node());
+}
+
+function appendMapSource(containerDiv, source, url = null) {
+    const sourceDiv = document.createElement("div");
+    sourceDiv.style.cssText = "font-size:11px; color:#999; margin-top:4px; font-style:italic;";
+
+    if (url) {
+        sourceDiv.innerHTML = `Source : <a href="${url}" target="_blank" rel="noopener noreferrer" style="color:#999; text-decoration:underline; cursor:pointer;">${source}</a>`;
+    } else {
+        sourceDiv.textContent = `Source : ${source}`;
+    }
+
+    containerDiv.appendChild(sourceDiv);
+}
+
 // Render Production Dashboard
 function renderProductionDashboard() {
     if (!dataProd || !departments) {
@@ -156,7 +243,11 @@ function renderProductionDashboard() {
     div.style.gap = "20px";
 
     const left = document.createElement("div");
+    left.style.display = "flex";
+    left.style.flexDirection = "column";
     left.appendChild(svgMap.node());
+    appendMapLegend(left, colorScaleMap, [0, maxVal], titleLabel + " (hl)", d => (d / 1000).toFixed(0) + "k");
+    appendMapSource(left, "Douane.gouv", "https://www.douane.gouv.fr/la-douane/opendata/mots-cles/recolte");
 
     const right = document.createElement("div");
     right.appendChild(chart);
@@ -287,7 +378,11 @@ function renderSunshineDashboard() {
     div.style.gap = "20px";
 
     const left = document.createElement("div");
+    left.style.display = "flex";
+    left.style.flexDirection = "column";
     left.appendChild(svgMap.node());
+    appendMapLegend(left, colorScaleMap, [0, maxVal], "Ensoleillement (h/an)", d => Math.round(d) + "h");
+    appendMapSource(left, "linternaute.com", "https://www.petitlopin.fr/?map=ensoleillement");
 
     const right = document.createElement("div");
     right.appendChild(chart);
@@ -582,7 +677,23 @@ function renderTopographyDashboard() {
     div.style.gap = "20px";
 
     const left = document.createElement("div");
+    left.style.display = "flex";
+    left.style.flexDirection = "column";
     left.appendChild(svgMap.node());
+
+    if (metric !== "exposition") {
+        const legendLabel = metric === "altitude" ? "Altitude (m)" : "Pente (%)";
+        const legendFormat = metric === "altitude"
+            ? d => Math.round(d) + "m"
+            : d => d.toFixed(1) + "%";
+        appendMapLegend(left, colorScale, [0, domainMax], legendLabel, legendFormat);
+    } else {
+        const compassDiv = document.createElement("div");
+        compassDiv.style.cssText = "font-size:11px; color:#555; margin-top:6px;";
+        compassDiv.innerHTML = `<strong>Légende :</strong> chaque flèche indique l'exposition solaire moyenne des vignes du département`;
+        left.appendChild(compassDiv);
+    }
+    appendMapSource(left, "INRAE", "https://entrepot.recherche.data.gouv.fr/dataset.xhtml?persistentId=doi:10.57745/KBTLDH");
 
     const right = document.createElement("div");
     right.appendChild(chart);
@@ -788,7 +899,7 @@ function renderImpactDashboard() {
         const production = d.total_prod || 0;
         
         // Calcul du Rendement (hl / ha)
-        const rendement = surface > 0.1 ? (production / surface) : 0; 
+        const rendement = surface > 20 ? (production / surface) : 0; 
         
         return {
             code: code,
@@ -821,6 +932,12 @@ function renderImpactDashboard() {
     title.style.borderBottom = "2px solid #ddd";
     title.style.paddingBottom = "10px";
     container.appendChild(title);
+
+    // Map wrapper
+    const mapDiv = document.createElement("div");
+    mapDiv.style.display = "flex";
+    mapDiv.style.flexDirection = "column";
+    mapDiv.style.width = "fit-content";
 
     // Carte
     const svgMap = d3.create("svg")
@@ -882,7 +999,10 @@ function renderImpactDashboard() {
         .text("Carte : Rendement Viticole (hl/ha)")
         .style("font-weight", "bold");
 
-    container.appendChild(svgMap.node());
+    
+    mapDiv.appendChild(svgMap.node());
+    appendMapLegend(mapDiv, colorScale, [0, 100], "Rendement (hl/ha)", d => Math.round(d) + " hl/ha");
+    container.appendChild(mapDiv);
 
     // Graphique
     const plotContainer = document.createElement("div");
