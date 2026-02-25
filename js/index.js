@@ -794,11 +794,6 @@ function renderImpactDashboard() {
     const container = document.createElement("div");
     container.style.fontFamily = "sans-serif";
 
-    const title = document.createElement("h3");
-    title.textContent = `Impact de ${metric === 'pente' ? 'la Pente' : metric === 'altitude' ? "l'Altitude" : metric === 'soleil' ? "l'Ensoleillement" : "l'Exposition"} sur le Rendement`;
-    title.style.cssText = "color:#800020;border-bottom:2px solid #ddd;padding-bottom:10px;";
-    container.appendChild(title);
-
     const mapsContainer = document.createElement("div");
     mapsContainer.style.cssText = "display:flex;gap:0;margin-top:20px;margin-bottom:30px;justify-content:space-between;align-items:flex-start;";
 
