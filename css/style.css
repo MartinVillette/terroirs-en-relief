@@ -1,266 +1,219 @@
 * {
-    margin: 0;
-    padding: 0;
     box-sizing: border-box;
+    margin:0;
+    padding:0;
 }
-
 body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: #333;
-    line-height: 1.6;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    /* background-color: #4A0E17; */
+    background-color: #5c131e;
 }
-
 .container {
     max-width: 1400px;
     margin: 0 auto;
-    padding: 20px;
-}
-
-/* En-tête */
-header {
-    text-align: center;
-    background: white;
+    background: #FDFBF7;
     padding: 30px;
-    border-radius: 10px;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    margin-bottom: 30px;
-}
-
-header h1 {
-    color: #764ba2;
-    font-size: 2.5em;
-    margin-bottom: 10px;
-}
-
-.subtitle {
-    color: #666;
-    font-size: 1.2em;
-}
-
-/* Layout principal */
-main {
-    display: grid;
-    grid-template-columns: 2fr 1fr;
-    grid-gap: 20px;
-}
-
-#map-section {
-    grid-column: 1;
-    grid-row: 1 / 3;
-    background: white;
-    padding: 20px;
-    border-radius: 10px;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-}
-
-#charts-section {
-    grid-column: 2;
-    grid-row: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-}
-
-#stats-panel {
-    grid-column: 2;
-    grid-row: 2;
-    background: white;
-    padding: 20px;
-    border-radius: 10px;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-}
-
-/* Carte */
-#map-container {
-    width: 100%;
-    height: 600px;
-    border: 1px solid #ddd;
-    border-radius: 5px;
-    overflow: hidden;
-}
-
-#map {
-    width: 100%;
-    height: 100%;
-}
-
-/* Graphiques */
-.chart-container {
-    background: white;
-    padding: 15px;
-    border-radius: 10px;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-}
-
-.chart-container h3 {
-    color: #764ba2;
-    margin-bottom: 10px;
-    font-size: 1.1em;
-}
-
-.chart-container svg {
-    width: 100%;
-    height: 200px;
-}
-
-/* Parcelles sur la carte */
-.vineyard-parcel {
-    stroke: #fff;
-    stroke-width: 0.5;
-    cursor: pointer;
-    transition: opacity 0.2s;
-}
-
-.vineyard-parcel:hover {
-    stroke: #764ba2;
-    stroke-width: 2;
-    opacity: 1 !important;
-}
-
-/* Tooltip */
-.tooltip {
-    position: absolute;
-    background: rgba(0, 0, 0, 0.8);
-    color: white;
-    padding: 10px;
-    border-radius: 5px;
-    pointer-events: none;
-    font-size: 0.9em;
-    z-index: 1000;
-}
-
-/* Statistiques */
-#stats-content p {
-    margin: 10px 0;
-    padding: 10px;
-    background: #f0f0f0;
-    border-radius: 5px;
-}
-
-/* Panneau de filtres */
-.filters-panel {
-    background: #f8f9fa;
-    padding: 20px;
     border-radius: 8px;
-    margin-bottom: 15px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    margin-top:100px;
+}
+
+h1 {
+    color: #5c131e;
+    margin-bottom: 20px;
+}
+
+h2 {
+    color: #C5A059;
+    font-style: italic;
+    font-weight: 400;
+}
+
+/* Tab navigation */
+.tab-nav {
     display: flex;
+    gap: 6px;
+    margin-bottom: 24px;
+    padding-bottom: 0;
     flex-wrap: wrap;
-    gap: 20px;
-    align-items: center;
-    border: 2px solid #e0e0e0;
 }
-
-.filter-group {
-    display: flex;
-    flex-direction: column;
-    min-width: 200px;
+.tab-btn {
+    padding: 10px 18px;
+    border: none;
+    background: none;
+    font-size: 14px;
+    font-weight: 500;
+    color: #777;
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+    border-radius: 4px 4px 0 0;
+    transition: color 0.15s, border-color 0.15s, background 0.15s;
 }
-
-.filter-group label {
-    font-weight: 600;
-    margin-bottom: 8px;
+.tab-btn:hover {
     color: #333;
-    font-size: 0.95em;
+    background: #f8f2f2;
+}
+.tab-btn.active {
+    color: #5c131e;
+    border-bottom: 3px solid #5c131e;
+    background: #fff1f0;
 }
 
-.filter-group select,
-.filter-group input[type="range"] {
-    padding: 8px;
+/* Tab panels */
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+.controls {
+    margin-bottom: 20px;
+}
+label {
+    margin-right: 10px;
+    font-weight: 500;
+}
+select {
+    padding: 8px 12px;
     border: 1px solid #ddd;
     border-radius: 4px;
-    font-size: 0.95em;
-}
-
-.filter-group input[type="range"] {
-    width: 100%;
+    font-size: 14px;
     cursor: pointer;
 }
-
-.btn-secondary {
-    padding: 10px 20px;
-    background: white;
-    border: 2px solid #667eea;
-    border-radius: 5px;
-    color: #667eea;
-    cursor: pointer;
-    font-weight: 600;
-    transition: all 0.3s;
-    align-self: flex-end;
+.dashboard-section {
+    margin-top: 20px;
+    margin-bottom: 40px;
 }
-
-.btn-secondary:hover {
-    background: #667eea;
-    color: white;
-}
-
-/* Footer */
-footer {
-    text-align: center;
-    color: white;
-    margin-top: 30px;
+.loading {
+    color: gray;
     padding: 20px;
+    text-align: center;
 }
-
-/* Responsive */
-@media (max-width: 1024px) {
-    main {
-        grid-template-columns: 1fr;
-    }
-    
-    #map-section,
-    #charts-section,
-    #stats-panel {
-        grid-column: 1;
-    }
+figcaption {
+    margin-top:20px;
+    font-style: italic;
+    font-size: 11px;
+    color: rgb(153, 153, 153);
 }
-
-/* ...existing code... */
-
-/* Tooltip enrichi */
-.tooltip {
-    position: absolute;
-    background: rgba(0, 0, 0, 0.9);
-    color: white;
-    padding: 12px;
-    border-radius: 8px;
-    pointer-events: none;
-    font-size: 0.85em;
-    line-height: 1.5;
+.dashboard-section {
+    display: flex;
+    justify-content: center;
+}
+header{
+    position: fixed;
+    width: 100%;
+    top:0;
+    left: 0;
     z-index: 1000;
-    max-width: 280px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    background-color: #4A0E17;
+}
+.nav-links img {
+    height:50px;
+    width:auto;
+}
+.nav-links {
+    width:100%;
+    padding:20px 0px;
+
+    max-width: 1400px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 40px;
+}
+.nav-links a {
+    margin-right: 15px;
+    color: #C5A059;
+    text-decoration: none;
+    font-weight: 500;
+    transition: 0.3s ease;
+    padding:10px 10px;
+    border-radius:5px 5px 0 0;
+    background-color: rgba(197, 160, 89, 0);
+}
+.nav-links a:hover { 
+    color: #FDFBF7;
+    background-color: rgba(197, 160, 89, 0.2);
+    border-bottom: 2px solid #C5A059;
+}
+#nav-focused {
+    border-bottom: 2px solid #C5A059;
 }
 
-.tooltip strong {
-    color: #ffd700;
+/* ─── Footer ─────────────────────────────────────────────────────────────────── */
+footer {
+    background-color: #4A0E17;
+    color: #FDFBF7;
+    padding: 30px 50px;
+    margin-top: 40px;
 }
 
-.tooltip hr {
-    margin: 8px 0;
-    border: 0;
-    border-top: 1px solid rgba(255,255,255,0.3);
+.footer-content {
+    max-width: 1400px;
+    margin: 0 auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 40px;
 }
 
-/* Boutons de contrôle carte */
-#reset-zoom,
-#fit-data {
-    padding: 10px 15px;
-    background: white;
-    border: 2px solid #667eea;
-    border-radius: 6px;
-    cursor: pointer;
-    font-weight: 600;
-    font-size: 0.9em;
-    color: #667eea;
-    transition: all 0.3s;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+.footer-left {
+    display: flex;
+    align-items: center;
+    gap: 14px;
 }
 
-#reset-zoom:hover,
-#fit-data:hover {
-    background: #667eea;
-    color: white;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+.footer-logo img {
+    width:50px;
+    height: auto;
+}
+
+.footer-title {
+    font-size: 16px;
+    font-weight: bold;
+    color: #C5A059;
+}
+
+.footer-sub {
+    font-size: 12px;
+    color: #aaa;
+    margin-top: 2px;
+}
+
+.footer-center {
+    text-align: center;
+}
+
+.footer-right {
+    text-align: right;
+}
+
+.footer-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: #C5A059;
+    margin-bottom: 6px;
+}
+
+.footer-course {
+    font-size: 13px;
+    font-weight: 500;
+    margin-bottom: 4px;
+}
+
+.footer-school {
+    font-size: 12px;
+    color: #ccc;
+    margin-bottom: 4px;
+}
+
+.footer-supervisor {
+    font-size: 12px;
+    color: #ccc;
+}
+
+.footer-authors {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 13px;
 }
