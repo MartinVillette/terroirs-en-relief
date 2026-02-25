@@ -221,7 +221,7 @@ function buildChoroplethMap(features, colorFn, tooltipFn, width, height, codeSel
         .attr("viewBox", [0, 0, width, height]);
 
     const projection = d3.geoConicConformal()
-        .center([2.454071, 46.279229]).scale(2600)
+        .center([2.454071, 46.279229]).scale(2200)
         .translate([width / 2, height / 2]);
     const path = d3.geoPath().projection(projection);
 
@@ -264,34 +264,45 @@ function buildChoroplethMap(features, colorFn, tooltipFn, width, height, codeSel
  * @param {HTMLElement} histChartEl  – bottom full-width element
  * @param {HTMLElement} extraEl      – optional extra element below histogram
  */
-function buildDashboardLayout(mapEl, legendEl, sourceEl, barChartEl, histChartEl, extraEl = null) {
+
+function buildDashboardLayout(mapEl, legendEl, sourceEl, barChartEl, histChartEl, factBoxEl = null,
+                               widthMap = 500, widthChart = 420, heightMap = 500, gap = 20) {
+
+    const bottomHeight = 380;
+
     const wrapper = document.createElement("div");
-    wrapper.style.cssText = "display:flex;flex-direction:column;gap:16px;";
+    wrapper.style.cssText = `display:grid;grid-template-columns:${widthMap}px ${widthChart}px;grid-template-rows:auto ${bottomHeight}px;gap:${gap}px;`;
 
-    const topRow = document.createElement("div");
-    topRow.style.cssText = "display:flex;align-items:flex-start;gap:20px;";
+    // ── Top left : map + legend + source ──
+    const topLeft = document.createElement("div");
+    topLeft.style.cssText = "display:flex;flex-direction:column;";
+    topLeft.appendChild(mapEl);
+    if (legendEl) topLeft.appendChild(legendEl);
+    if (sourceEl) topLeft.appendChild(sourceEl);
 
-    const leftCol = document.createElement("div");
-    leftCol.style.cssText = "display:flex;flex-direction:column;";
-    leftCol.appendChild(mapEl);
-    if (legendEl) leftCol.appendChild(legendEl);
-    if (sourceEl) leftCol.appendChild(sourceEl);
+    // ── Top right : fact box ──
+    const topRight = document.createElement("div");
+    topRight.style.cssText = "display:flex;flex-direction:column;";
+    if (factBoxEl) topRight.appendChild(factBoxEl);
 
-    const rightCol = document.createElement("div");
-    rightCol.appendChild(barChartEl);
+    // ── Bottom left : distribution histogram (fixed height) ──
+    const bottomLeft = document.createElement("div");
+    bottomLeft.style.cssText = `display:flex;flex-direction:column;height:${bottomHeight}px;overflow:hidden;`;
+    bottomLeft.appendChild(histChartEl);
 
-    topRow.appendChild(leftCol);
-    topRow.appendChild(rightCol);
-    wrapper.appendChild(topRow);
+    // ── Bottom right : top10 bar chart (fixed height) ──
+    const bottomRight = document.createElement("div");
+    bottomRight.style.cssText = `display:flex;flex-direction:column;height:${bottomHeight}px;overflow:hidden;`;
+    bottomRight.appendChild(barChartEl);
 
-    const bottomRow = document.createElement("div");
-    bottomRow.style.cssText = "display:flex;flex-direction:column;gap:10px;";
-    bottomRow.appendChild(histChartEl);
-    if (extraEl) bottomRow.appendChild(extraEl);
-    wrapper.appendChild(bottomRow);
+    wrapper.appendChild(topLeft);
+    wrapper.appendChild(topRight);
+    wrapper.appendChild(bottomLeft);
+    wrapper.appendChild(bottomRight);
 
     return wrapper;
 }
+
 
 // ─── Wine type configs ────────────────────────────────────────────────────────
 const wineThemes = {
@@ -305,7 +316,7 @@ const wineThemes = {
 function renderProductionDashboard() {
     if (!dataProd || !departments) return;
 
-    const widthMap = 500, heightMap = 500, widthChart = 420, heightChart = 460;
+    const widthMap = 500, heightMap = 500, widthChart = 420, heightChart = 380;
     const totalWidth = widthMap + widthChart + 20;
     const codeSelection = departementSelectionne;
 
@@ -318,11 +329,10 @@ function renderProductionDashboard() {
 
 function renderProductionVolume(widthMap, heightMap, widthChart, heightChart, totalWidth, codeSelection) {
     const metric = choixVin;
-    const theme = wineThemes[metric];
+    const theme  = wineThemes[metric];
     const maxVal = d3.max(dataProd, d => d[metric]) || 10000;
     const colorScale = d3.scaleSequential([0, maxVal], theme.scale);
 
-    // Annotate geojson
     const geojson = JSON.parse(JSON.stringify(departments));
     geojson.features.forEach(f => {
         const row = dataProd.find(d => String(d.code_dept).padStart(2, '0') === f.properties.code);
@@ -337,19 +347,16 @@ function renderProductionVolume(widthMap, heightMap, widthChart, heightChart, to
         code => setDepartement(code)
     );
 
-    // Legend
     const legendDiv = document.createElement("div");
     appendMapLegend(legendDiv, colorScale, [0, maxVal], theme.label + " (hl)", d => (d / 1000).toFixed(0) + "k");
-    const legendEl = legendDiv.firstChild;
 
-    // Source
     const sourceDiv = document.createElement("div");
     appendMapSource(sourceDiv, "Douane.gouv", "https://www.douane.gouv.fr/la-douane/opendata/mots-cles/recolte");
 
-    // Top 15
-    const topData = [...dataProd].sort((a, b) => d3.descending(a[metric], b[metric])).slice(0, 15);
+    // ── Top 10 ──
+    const topData = [...dataProd].sort((a, b) => d3.descending(a[metric], b[metric])).slice(0, 10);
     const barChart = Plot.plot({
-        title: `Top 15 : ${theme.label} (hl)`,
+        title: `Top 10 : ${theme.label} (hl)`,
         marginLeft: 120, width: widthChart, height: heightChart,
         x: { label: null, grid: true, tickFormat: "s" },
         y: { label: null },
@@ -367,25 +374,35 @@ function renderProductionVolume(widthMap, heightMap, widthChart, heightChart, to
         ]
     });
 
-    // Histogram
+    // ── Histogram ──
+    const factBoxWidth = 220;
+    const histWidth = widthMap + widthChart + 20 - 20 - factBoxWidth;
     const histChart = renderDistributionChart(
-        dataProd, metric, "hl", colorScale, totalWidth, 220,
-        `Répartition des départements par volume (${theme.label})`
+        dataProd, metric, "hl", colorScale, histWidth, 380,
+        `Répartition par volume (${theme.label})`
     );
 
-    const layout = buildDashboardLayout(mapEl, legendEl, sourceDiv.firstChild, barChart, histChart);
+    // ── Fact box ──
+    const factBox = buildFactBox(codeSelection, dataProd, metric, colorScale, "hl",
+        d => (d[metric] / 1000).toFixed(0) + "k hl", theme.color);
+
+    const layout = buildDashboardLayout(
+        mapEl, legendDiv.firstChild, sourceDiv.firstChild,
+        barChart, histChart, factBox,
+        widthMap, widthChart, heightMap
+    );
+
     const container = document.getElementById('production-dashboard');
     container.innerHTML = '';
     container.appendChild(layout);
 }
 
 function renderProductionRendement(widthMap, heightMap, widthChart, heightChart, totalWidth, codeSelection) {
-    // Build combined data (production / surface)
     const combinedData = dataProd.map(d => {
-        const code = String(d.code_dept).padStart(2, '0');
-        const surface = d.surf_totale || 0;
-        const production = d[choixVin] || 0;
-        const rendement = surface > 20 ? production / surface : 0;
+        const code       = String(d.code_dept).padStart(2, '0');
+        const surface    = d.surf_totale || 0;
+        const production = d[choixVin]   || 0;
+        const rendement  = surface > 20 ? production / surface : 0;
         return { code, nom_dept: d.nom_dept, surface, production, rendement };
     }).filter(d => d.rendement > 0);
 
@@ -408,14 +425,14 @@ function renderProductionRendement(widthMap, heightMap, widthChart, heightChart,
 
     const legendDiv = document.createElement("div");
     appendMapLegend(legendDiv, colorScale, [0, maxVal], "Rendement (hl/ha)", d => Math.round(d) + " hl/ha");
-    const legendEl = legendDiv.firstChild;
 
     const sourceDiv = document.createElement("div");
     appendMapSource(sourceDiv, "Douane.gouv", "https://www.douane.gouv.fr/la-douane/opendata/mots-cles/recolte");
 
-    const topData = [...combinedData].sort((a, b) => d3.descending(a.rendement, b.rendement)).slice(0, 15);
+    // ── Top 10 ──
+    const topData = [...combinedData].sort((a, b) => d3.descending(a.rendement, b.rendement)).slice(0, 10);
     const barChart = Plot.plot({
-        title: "Top 15 : Rendement (hl/ha)",
+        title: "Top 10 : Rendement (hl/ha)",
         marginLeft: 140, width: widthChart, height: heightChart,
         x: { label: "hl/ha", grid: true },
         y: { label: null },
@@ -433,12 +450,22 @@ function renderProductionRendement(widthMap, heightMap, widthChart, heightChart,
         ]
     });
 
+    const factBoxWidth = 220;
+    const histWidth = widthMap + widthChart + 20 - 20 - factBoxWidth;
     const histChart = renderDistributionChart(
-        combinedData, "rendement", "hl/ha", colorScale, totalWidth, 220,
+        combinedData, "rendement", "hl/ha", colorScale, histWidth, 380,
         "Répartition des départements par rendement"
     );
 
-    const layout = buildDashboardLayout(mapEl, legendEl, sourceDiv.firstChild, barChart, histChart);
+    const factBox = buildFactBox(codeSelection, combinedData, "rendement", colorScale, "hl/ha",
+        d => Math.round(d.rendement) + " hl/ha", "#1976d2");
+
+    const layout = buildDashboardLayout(
+        mapEl, legendDiv.firstChild, sourceDiv.firstChild,
+        barChart, histChart, factBox,
+        widthMap, widthChart, heightMap
+    );
+
     const container = document.getElementById('production-dashboard');
     container.innerHTML = '';
     container.appendChild(layout);
@@ -458,8 +485,7 @@ function renderCaracDashboard() {
 function renderCaracSoleil() {
     if (!dataSoleil) return;
 
-    const widthMap = 500, heightMap = 500, widthChart = 420, heightChart = 460;
-    const totalWidth = widthMap + widthChart + 20;
+    const widthMap = 500, heightMap = 500, widthChart = 420, heightChart = 380;
     const codeSelection = departementSelectionne;
 
     const maxVal = d3.max(dataSoleil, d => d.heures_soleil) || 3000;
@@ -481,13 +507,13 @@ function renderCaracSoleil() {
 
     const legendDiv = document.createElement("div");
     appendMapLegend(legendDiv, colorScale, [0, maxVal], "Ensoleillement (h/an)", d => Math.round(d) + "h");
-    const legendEl = legendDiv.firstChild;
 
     const sourceDiv = document.createElement("div");
     appendMapSource(sourceDiv, "linternaute.com", "https://www.petitlopin.fr/?map=ensoleillement");
 
+    // ── Top 10 ──
     const barChart = Plot.plot({
-        title: "Top 15 : Ensoleillement (h/an)",
+        title: "Top 10 : Ensoleillement (h/an)",
         marginLeft: 140, width: widthChart, height: heightChart,
         x: { label: "h/an", grid: true, tickFormat: "s" },
         y: { label: null },
@@ -495,23 +521,34 @@ function renderCaracSoleil() {
             Plot.barX(dataSoleil, {
                 x: "heures_soleil", y: "nom_dept",
                 fill: d => String(d.code_dept).padStart(2, '0') === codeSelection ? "#222" : colorScale(d.heures_soleil),
-                sort: { y: "x", reverse: true, limit: 15 }
+                sort: { y: "x", reverse: true, limit: 10 }
             }),
             Plot.text(dataSoleil, {
                 x: "heures_soleil", y: "nom_dept",
                 text: d => (d.heures_soleil / 1000).toFixed(1) + "k",
                 textAnchor: "start", dx: 5, fill: "#666", fontSize: 10,
-                sort: { y: "x", reverse: true, limit: 15 }
+                sort: { y: "x", reverse: true, limit: 10 }
             })
         ]
     });
 
+    const factBoxWidth = 220;
+    const histWidth = widthMap + widthChart + 20 - 20 - factBoxWidth;
     const histChart = renderDistributionChart(
-        dataSoleil, "heures_soleil", "h/an", colorScale, totalWidth, 220,
+        dataSoleil, "heures_soleil", "h/an", colorScale, histWidth, 380,
         "Répartition des départements par ensoleillement"
     );
 
-    const layout = buildDashboardLayout(mapEl, legendEl, sourceDiv.firstChild, barChart, histChart);
+    const dataForFact = dataSoleil.map(d => ({ ...d, code: String(d.code_dept).padStart(2, '0') }));
+    const factBox = buildFactBox(codeSelection, dataForFact, "heures_soleil", colorScale, "h/an",
+        d => Math.round(d.heures_soleil) + " h/an", "#f39c12");
+
+    const layout = buildDashboardLayout(
+        mapEl, legendDiv.firstChild, sourceDiv.firstChild,
+        barChart, histChart, factBox,
+        widthMap, widthChart, heightMap
+    );
+
     const container = document.getElementById('caracteristiques-dashboard');
     container.innerHTML = '';
     container.appendChild(layout);
@@ -520,36 +557,35 @@ function renderCaracSoleil() {
 function renderCaracTopo(metric) {
     if (!dataTopo) return;
 
-    const widthMap = 500, heightMap = 500, widthChart = 420, heightChart = 460;
-    const totalWidth = widthMap + widthChart + 20;
+    const widthMap = 500, heightMap = 500, widthChart = 420, heightChart = 380;
     const codeSelection = departementSelectionne;
 
     const deptNamesMap = new Map();
     departments.features.forEach(f => deptNamesMap.set(f.properties.code, f.properties.nom));
     const enriched = dataTopo.map(d => ({
         ...d,
+        code: String(d.code_dep).padStart(2, '0'),
         nom_dept: deptNamesMap.get(String(d.code_dep).padStart(2, '0')) || `Dept ${d.code_dep}`
     }));
 
     const configs = {
-        pente:      { interpolator: d3.interpolateReds,    domainMax: 15,   label: "Pente",      unit: "%",  title: "Top 15 : Pente moyenne (%)" },
-        altitude:   { interpolator: d3.interpolateGnBu,    domainMax: null, label: "Altitude",   unit: "m",  title: "Top 15 : Altitude moyenne (m)" },
-        exposition: { interpolator: d3.interpolateYlOrBr,  domainMax: 360,  label: "Exposition", unit: "°",  title: "Exposition des vignes (rosace)" }
+        pente:      { interpolator: d3.interpolateReds,   domainMax: 15,   label: "Pente",      unit: "%" },
+        altitude:   { interpolator: d3.interpolateGnBu,   domainMax: null, label: "Altitude",   unit: "m" },
+        exposition: { interpolator: d3.interpolateYlOrBr, domainMax: 360,  label: "Exposition", unit: "°" }
     };
 
     const cfg = configs[metric];
-    const domainMax = cfg.domainMax || d3.max(enriched, d => d[metric]) || 100;
+    const domainMax  = cfg.domainMax || d3.max(enriched, d => d[metric]) || 100;
     const colorScale = d3.scaleSequential([0, domainMax], cfg.interpolator);
 
     const geojson = JSON.parse(JSON.stringify(departments));
     geojson.features.forEach(f => {
-        const row = enriched.find(d => String(d.code_dep).padStart(2, '0') === f.properties.code);
+        const row = enriched.find(d => d.code === f.properties.code);
         f.properties.value = row ? row[metric] : 0;
     });
 
     let mapEl;
     if (metric === "exposition") {
-        // Custom exposition map with arrows
         mapEl = buildExpositionMap(geojson.features, enriched, widthMap, heightMap, codeSelection);
     } else {
         mapEl = buildChoroplethMap(
@@ -561,8 +597,7 @@ function renderCaracTopo(metric) {
         );
     }
 
-    // Legend / compass note
-    let legendEl = null;
+    let legendEl;
     if (metric !== "exposition") {
         const legendDiv = document.createElement("div");
         appendMapLegend(legendDiv, colorScale, [0, domainMax], `${cfg.label} (${cfg.unit})`,
@@ -577,21 +612,22 @@ function renderCaracTopo(metric) {
     const sourceDiv = document.createElement("div");
     appendMapSource(sourceDiv, "INRAE", "https://entrepot.recherche.data.gouv.fr/dataset.xhtml?persistentId=doi:10.57745/KBTLDH");
 
-    // Right chart
+    // ── Top 10 or rose ──
     let barChart;
     if (metric === "exposition") {
         barChart = renderExpositionRoseChart(enriched, codeSelection, widthChart, heightChart);
     } else {
         const topData = [...enriched].filter(d => d[metric] > 0)
-            .sort((a, b) => d3.descending(a[metric], b[metric])).slice(0, 15);
+            .sort((a, b) => d3.descending(a[metric], b[metric])).slice(0, 10);
         barChart = Plot.plot({
-            title: cfg.title, marginLeft: 140, width: widthChart, height: heightChart,
+            title: `Top 10 : ${cfg.label} (${cfg.unit})`,
+            marginLeft: 140, width: widthChart, height: heightChart,
             x: { label: cfg.unit, grid: true },
             y: { label: null },
             marks: [
                 Plot.barX(topData, {
                     x: metric, y: "nom_dept",
-                    fill: d => String(d.code_dep).padStart(2, '0') === codeSelection ? "#222" : colorScale(d[metric]),
+                    fill: d => d.code === codeSelection ? "#222" : colorScale(d[metric]),
                     sort: { y: "x", reverse: true }
                 }),
                 Plot.text(topData, {
@@ -603,17 +639,27 @@ function renderCaracTopo(metric) {
         });
     }
 
-    // Histogram (only for non-exposition)
+    // ── Histogram + fact box ──
+    const factBoxWidth = 220;
+    const histWidth    = widthMap + widthChart + 20 - 20 - factBoxWidth;
+
     const histChart = metric !== "exposition"
-        ? renderDistributionChart(enriched, metric, cfg.unit, colorScale, totalWidth, 220,
-            `Répartition des départements par ${cfg.label.toLowerCase()}`)
+        ? renderDistributionChart(enriched, metric, cfg.unit, colorScale, histWidth, 380,
+            `Répartition par ${cfg.label.toLowerCase()}`)
+        : document.createElement("div");
+
+    const factBox = metric !== "exposition"
+        ? buildFactBox(codeSelection, enriched, metric, colorScale, cfg.unit,
+            d => metric === "altitude" ? Math.round(d[metric]) + "m" : d[metric].toFixed(1) + cfg.unit,
+            d3.schemeTableau10[Object.keys(configs).indexOf(metric)])
         : null;
 
     const layout = buildDashboardLayout(
         mapEl, legendEl, sourceDiv.firstChild,
-        barChart,
-        histChart || document.createElement("div")
+        barChart, histChart, factBox,
+        widthMap, widthChart, heightMap
     );
+
     const container = document.getElementById('caracteristiques-dashboard');
     container.innerHTML = '';
     container.appendChild(layout);
@@ -945,6 +991,76 @@ function renderImpactDashboard() {
     const dashboardContainer = document.getElementById('impact-dashboard');
     dashboardContainer.innerHTML = '';
     dashboardContainer.appendChild(container);
+}
+
+// ─── Fact box builder ─────────────────────────────────────────────────────────
+/**
+ * Builds a small info card for the selected department.
+ * @param {string}   codeSelection
+ * @param {object[]} data          – must have .code and .[metric]
+ * @param {string}   metric
+ * @param {function} colorScale
+ * @param {string}   unit
+ * @param {function} formatFn      – d => string shown as "value"
+ * @param {string}   accentColor
+ */
+
+function buildFactBox(codeSelection, data, metric, colorScale, unit, formatFn, accentColor = "#1976d2") {
+    const box = document.createElement("div");
+    box.style.cssText = `
+        background:#f8f9fa;border:1px solid #ddd;border-radius:8px;
+        padding:12px 14px;box-sizing:border-box;width:100%;
+        display:flex;flex-direction:column;gap:8px;
+        font-family:sans-serif;font-size:13px;color:#333;
+        box-shadow:0 1px 4px rgba(0,0,0,0.06);
+    `;
+
+    if (!codeSelection) {
+        box.innerHTML = `
+            <div style="text-align:center;color:#aaa;padding:16px 0;">
+                <div style="font-size:24px;margin-bottom:6px;">🖱️</div>
+                <div>Cliquez sur un département pour voir ses détails</div>
+            </div>`;
+        return box;
+    }
+
+    const d = data.find(r => r.code === codeSelection || String(r.code_dept).padStart(2,'0') === codeSelection);
+    if (!d) {
+        box.innerHTML = `<div style="text-align:center;color:#aaa;padding:16px 0;">Données indisponibles</div>`;
+        return box;
+    }
+
+    const sorted   = [...data].filter(r => r[metric] > 0).sort((a, b) => d3.descending(a[metric], b[metric]));
+    const rank     = sorted.findIndex(r => (r.code || String(r.code_dept).padStart(2,'0')) === codeSelection) + 1;
+    const total    = sorted.length;
+    const val      = d[metric];
+    const valColor = colorScale(val);
+    const nom      = d.nom_dept || d.nom || codeSelection;
+    const aopList  = aopParDepartement[codeSelection] || [];
+
+    box.innerHTML = `
+        <div style="font-weight:bold;font-size:14px;color:${accentColor};border-bottom:1px solid #e0e0e0;padding-bottom:6px;">
+            ${nom} <span style="font-size:11px;color:#888;font-weight:normal;">(${codeSelection})</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+            <div style="width:12px;height:12px;border-radius:50%;background:${valColor};flex-shrink:0;border:1px solid #ccc;"></div>
+            <span style="font-size:20px;font-weight:bold;">${formatFn(d)}</span>
+            <span style="font-size:11px;color:#888;">${unit}</span>
+        </div>
+        <div style="background:#e9ecef;border-radius:4px;padding:4px 8px;font-size:12px;">
+            Classé <strong>${rank}<sup>e</sup></strong> / ${total} départements
+        </div>
+        ${aopList.length > 0 ? `
+        <div style="font-size:11px;color:#666;border-top:1px dashed #ddd;padding-top:6px;">
+            <div style="font-weight:600;margin-bottom:3px;">Principales AOP :</div>
+            <ul style="margin:0;padding-left:14px;line-height:1.6;">
+                ${aopList.slice(0, 4).map(a => `<li>${a}</li>`).join('')}
+                ${aopList.length > 4 ? `<li style="color:#bbb;font-style:italic;">+ ${aopList.length - 4} autres</li>` : ''}
+            </ul>
+        </div>` : '<div style="font-size:11px;color:#bbb;font-style:italic;">Aucune AOP répertoriée</div>'}
+    `;
+
+    return box;
 }
 
 // ─── Event listeners ──────────────────────────────────────────────────────────
