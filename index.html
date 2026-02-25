@@ -140,27 +140,30 @@
     </header>
 
     <div class="container">
-        <h1>Dashboard Vins & Géographie - France 2024</h1>
+        <h1>
+            Dashboard Vins & Géographie - France 2024
+            <select id="wineTypeGlobal" style="margin-left:20px;padding:6px 12px;border:1px solid #ddd;border-radius:4px;font-size:14px;cursor:pointer;vertical-align:middle;">
+                <option value="total_aop">Production Totale AOP</option>
+                <option value="aop_rouge">Vin Rouge AOP</option>
+                <option value="aop_blanc">Vin Blanc AOP</option>
+                <option value="aop_rose">Vin Rosé AOP</option>
+            </select>
+        </h1>
 
         <!-- Tab navigation -->
         <div class="tab-nav">
             <button class="tab-btn active" data-tab="production">Production</button>
-            <button class="tab-btn" data-tab="ensoleillement">Ensoleillement</button>
-            <button class="tab-btn" data-tab="pente">Pente</button>
-            <button class="tab-btn" data-tab="orientation">Orientation</button>
-            <button class="tab-btn" data-tab="altitude">Altitude</button>
+            <button class="tab-btn" data-tab="caracteristiques">Caractéristiques</button>
             <button class="tab-btn" data-tab="impact">Impact</button>
         </div>
 
         <!-- Production -->
         <div class="tab-panel active" id="tab-production">
             <div class="controls">
-                <label for="wineType">Type de vin :</label>
-                <select id="wineType">
-                    <option value="total_aop">Production Totale AOP</option>
-                    <option value="aop_rouge">Vin Rouge AOP</option>
-                    <option value="aop_blanc">Vin Blanc AOP</option>
-                    <option value="aop_rose">Vin Rosé AOP</option>
+                <label for="prodType">Afficher :</label>
+                <select id="prodType">
+                    <option value="production">Volume de production</option>
+                    <option value="rendement">Rendement</option>
                 </select>
             </div>
             <div id="production-dashboard" class="dashboard-section">
@@ -168,31 +171,19 @@
             </div>
         </div>
 
-        <!-- Ensoleillement -->
-        <div class="tab-panel" id="tab-ensoleillement">
-            <div id="sunshine-dashboard" class="dashboard-section">
-                <div class="loading">Chargement des données d'ensoleillement...</div>
+        <!-- Caractéristiques -->
+        <div class="tab-panel" id="tab-caracteristiques">
+            <div class="controls">
+                <label for="caracType">Caractéristique :</label>
+                <select id="caracType">
+                    <option value="ensoleillement">Ensoleillement</option>
+                    <option value="pente">Pente</option>
+                    <option value="orientation">Orientation</option>
+                    <option value="altitude">Altitude</option>
+                </select>
             </div>
-        </div>
-
-        <!-- Pente -->
-        <div class="tab-panel" id="tab-pente">
-            <div id="pente-dashboard" class="dashboard-section">
-                <div class="loading">Chargement des données de pente...</div>
-            </div>
-        </div>
-
-        <!-- Orientation -->
-        <div class="tab-panel" id="tab-orientation">
-            <div id="orientation-dashboard" class="dashboard-section">
-                <div class="loading">Chargement des données d'orientation...</div>
-            </div>
-        </div>
-
-        <!-- Altitude -->
-        <div class="tab-panel" id="tab-altitude">
-            <div id="altitude-dashboard" class="dashboard-section">
-                <div class="loading">Chargement des données d'altitude...</div>
+            <div id="caracteristiques-dashboard" class="dashboard-section">
+                <div class="loading">Chargement des données...</div>
             </div>
         </div>
 
@@ -211,7 +202,6 @@
                 <div class="loading">Chargement de l'analyse d'impact...</div>
             </div>
         </div>
-
     </div>
 
     <script src="js/index.js"></script>
