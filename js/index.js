@@ -613,9 +613,15 @@ function renderCaracTopo(metric) {
     appendMapSource(sourceDiv, "INRAE", "https://entrepot.recherche.data.gouv.fr/dataset.xhtml?persistentId=doi:10.57745/KBTLDH");
 
     // ── Top 10 or rose ──
-    let barChart;
+    let barChart   = null;
+    let factBox    = null;
+    let topRightEl = null;
+    let bottomRightEl = document.createElement("div");
+    
     if (metric === "exposition") {
-        barChart = renderExpositionRoseChart(enriched, codeSelection, widthChart, heightChart);
+        // Rose chart goes TOP RIGHT, bottom right is empty
+        topRightEl    = renderExpositionRoseChart(enriched, codeSelection, widthChart, heightChart);
+        bottomRightEl = document.createElement("div");
     } else {
         const topData = [...enriched].filter(d => d[metric] > 0)
             .sort((a, b) => d3.descending(a[metric], b[metric])).slice(0, 10);
@@ -637,6 +643,10 @@ function renderCaracTopo(metric) {
                 })
             ]
         });
+        topRightEl    = buildFactBox(codeSelection, enriched, metric, colorScale, cfg.unit,
+            d => metric === "altitude" ? Math.round(d[metric]) + "m" : d[metric].toFixed(1) + cfg.unit,
+            d3.schemeTableau10[Object.keys(configs).indexOf(metric)]);
+        bottomRightEl = barChart;
     }
 
     // ── Histogram + fact box ──
@@ -648,15 +658,11 @@ function renderCaracTopo(metric) {
             `Répartition par ${cfg.label.toLowerCase()}`)
         : document.createElement("div");
 
-    const factBox = metric !== "exposition"
-        ? buildFactBox(codeSelection, enriched, metric, colorScale, cfg.unit,
-            d => metric === "altitude" ? Math.round(d[metric]) + "m" : d[metric].toFixed(1) + cfg.unit,
-            d3.schemeTableau10[Object.keys(configs).indexOf(metric)])
-        : null;
-
     const layout = buildDashboardLayout(
         mapEl, legendEl, sourceDiv.firstChild,
-        barChart, histChart, factBox,
+        bottomRightEl,   // bottom right
+        histChart,        // bottom left
+        topRightEl,       // top right
         widthMap, widthChart, heightMap
     );
 
@@ -949,7 +955,7 @@ function renderImpactDashboard() {
                 </div>`;
         }
     } else {
-        summaryBox.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:#999;text-align:center;"><p style="font-size:30px;margin-bottom:10px;">🖱️</p><p>Cliquez sur un département pour voir son analyse comparative.</p></div>`;
+        summaryBox.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:#999;text-align:center;"><p>Cliquez sur un département pour voir son analyse comparative.</p></div>`;
     }
 
     mapsContainer.appendChild(rendementMapContainer);
@@ -1018,7 +1024,6 @@ function buildFactBox(codeSelection, data, metric, colorScale, unit, formatFn, a
     if (!codeSelection) {
         box.innerHTML = `
             <div style="text-align:center;color:#aaa;padding:16px 0;">
-                <div style="font-size:24px;margin-bottom:6px;">🖱️</div>
                 <div>Cliquez sur un département pour voir ses détails</div>
             </div>`;
         return box;
