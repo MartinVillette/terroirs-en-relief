@@ -7,45 +7,7 @@
     <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
     <script src="https://cdn.jsdelivr.net/npm/@observablehq/plot@0.6"></script>
     <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            margin: 0;
-            padding: 20px;
-            background-color: #f5f5f5;
-        }
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            background: white;
-            padding: 30px;
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-        }
-        .nav-links {
-            margin-bottom: 20px;
-            padding-bottom: 15px;
-            border-bottom: 2px solid #e0e0e0;
-        }
-        .nav-links a {
-            margin-right: 15px;
-            color: #1976d2;
-            text-decoration: none;
-            font-weight: 500;
-        }
-        .nav-links a:hover {
-            text-decoration: underline;
-        }
-        h1 {
-            color: #333;
-            margin-bottom: 20px;
-        }
-        h2 {
-            color: #555;
-            margin-top: 40px;
-            margin-bottom: 20px;
-            padding-top: 20px;
-            border-top: 2px solid #e0e0e0;
-        }
+
         h3 {
             color: #666;
             margin-top: 25px;
@@ -60,10 +22,18 @@
             margin-top: 20px;
             margin-bottom: 40px;
         }
+        section{
+            margin-bottom: 40px;
+        }
+        section:not(:first-child) {
+            border-top: 1px solid #C5A059;
+            padding-top: 20px;
+        }
         table {
             width: 100%;
             border-collapse: collapse;
             font-size: 14px;
+            margin-top: 10px;
         }
         thead {
             background-color: #f5f5f5;
@@ -103,7 +73,7 @@
         .badge-clim { background: #e8f5e9; color: #2e7d32; }
         .badge-topo { background: #fff3e0; color: #e65100; }
 
-        img {
+        .container img {
             width:100%;
             display: flex;
             justify-content: center;
@@ -113,7 +83,6 @@
             max-width: 900px;
         }
     </style>
-
     <style>
         details {
             margin: 20px 0;
@@ -164,15 +133,20 @@
         .cm  { color: #6a9955; }
         .nb  { color: #b5cea8; }
     </style>
+    <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-    <div class="container">
-
+    <header>
         <div class="nav-links">
+            <img src="assets/images/logo.png" alt="">
             <a href="index.html">Dashboard</a>
-            <a href="methodology.html">Méthodologie</a>
+            <a href="methodology.html" id="nav-focused">Méthodologie</a>
             <a href="exploration.html">Explorer les données</a>
         </div>
+    </header>
+    <div class="container">
+
+        
 
         <h1>Méthodologie</h1>
 
@@ -365,5 +339,33 @@ df_dep.<span class="fn">to_csv</span>(os.<span class="fn">path.join</span>(PROCE
         </section>
 
     </div>
+
+    <footer>
+        <div class="footer-content">
+            <div class="footer-left">
+                <span class="footer-logo"><img src="assets/images/logo.png" alt=""></span>
+                <div>
+                    <div class="footer-title">Wine Geometry Viz</div>
+                    <div class="footer-sub">Visualisation interactive de la viticulture française</div>
+                </div>
+            </div>
+    
+            <div class="footer-center">
+                <div class="footer-label">Projet académique</div>
+                <div class="footer-course">MOS_09_1 - Visualisation interactive de données</div>
+                <div class="footer-school">École Centrale de Lyon · 2026</div>
+                <div class="footer-supervisor">Encadrant : <strong>Romain Vuillemot</strong></div>
+            </div>
+    
+            <div class="footer-right">
+                <div class="footer-label">Auteurs</div>
+                <div class="footer-authors">
+                    <span>Léo Calmettes</span>
+                    <span>Martin Villette</span>
+                </div>
+            </div>
+        </div>
+    </footer>
+    
 </body>
 </html>
