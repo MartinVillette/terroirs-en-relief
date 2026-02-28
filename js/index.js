@@ -118,6 +118,7 @@ async function loadData() {
             d3.csv("data/processed/production_vins_2024_clean.csv", d3.autoType),
             d3.json("https://raw.githubusercontent.com/gregoiredavid/france-geojson/master/departements.geojson"),
             d3.csv("data/processed/ensoleillement_france_2024.csv", d3.autoType),
+            // d3.csv("data/processed/topo_par_departement_old.csv", d3.autoType),
             d3.csv("data/processed/topo_par_departement.csv", d3.autoType),
         ]);
         dataProd   = prodData;
@@ -839,18 +840,12 @@ function renderImpactDashboard() {
     const colorScaleRendement = d3.scaleSequential([0, 100], d3.interpolateYlGnBu);
     const colorScaleFactor    = d3.scaleSequential([0, d3.max(combinedData, d => d[metric]) || 100], metricConfig.interpolator);
 
-    const rankedByRendement = [...combinedData].sort((a, b) => b.rendement - a.rendement);
-    const rankedByMetric    = [...combinedData].sort((a, b) => b[metric] - a[metric]);
-    const totalDepts = combinedData.length;
-
     const container = document.createElement("div");
     container.style.fontFamily = "sans-serif";
 
+    // ── Two maps side by side + summary box ──
     const mapsContainer = document.createElement("div");
-    mapsContainer.style.cssText = "display:flex;gap:0;margin-top:20px;margin-bottom:30px;justify-content:space-between;align-items:flex-start;";
-
-    const projection = d3.geoConicConformal().center([2.454071, 46.279229]).scale(2100).translate([widthMap / 2, heightMap / 2]);
-    const path = d3.geoPath().projection(projection);
+    mapsContainer.style.cssText = "display:flex;gap:20px;margin-bottom:30px;align-items:flex-start;";
 
     // Map 1: Rendement
     const geojsonR = JSON.parse(JSON.stringify(departments));
@@ -912,58 +907,15 @@ function renderImpactDashboard() {
     factorMapContainer.appendChild(mapFactor);
     appendMapLegend(factorMapContainer, colorScaleFactor, [0, d3.max(combinedData, d => d[metric]) || 100], metricConfig.label, d => Math.round(d) + metricConfig.unit);
 
-    // Summary box
-    const summaryBox = document.createElement("div");
-    summaryBox.style.cssText = "flex:0 0 250px;min-height:500px;padding:20px;background:#f8f9fa;border:1px solid #ddd;border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,0.05);";
-
-    if (codeSelection) {
-        const d = combinedData.find(c => c.code === codeSelection);
-        if (!d) {
-            summaryBox.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:#999;text-align:center;"><p>Données indisponibles pour ce département.</p></div>`;
-        } else {
-            const rankRendement = rankedByRendement.findIndex(r => r.code === codeSelection) + 1;
-            const rankMetric    = rankedByMetric.findIndex(r => r.code === codeSelection) + 1;
-            const aopList = aopParDepartement[codeSelection] || [];
-            const displayedAOP = aopList.slice(0, 6);
-            const remainingCount = aopList.length - 6;
-            const aopHTML = aopList.length > 0 ? `
-                <div style="margin-top:20px;border-top:1px dashed #ccc;padding-top:15px;">
-                    <p style="margin:0 0 8px 0;font-size:0.9em;color:#666;font-weight:500;">Principales AOP :</p>
-                    <ul style="margin:0;padding-left:20px;font-size:0.8em;color:#555;line-height:1.6;">
-                        ${displayedAOP.map(a => `<li>${a}</li>`).join('')}
-                        ${remainingCount > 0 ? `<li style="font-style:italic;color:#999;">+ ${remainingCount} autre${remainingCount > 1 ? 's' : ''}...</li>` : ''}
-                    </ul>
-                </div>` : '';
-            summaryBox.innerHTML = `
-                <div style="text-align:center;margin-bottom:15px;">
-                    <h4 style="margin:0;color:#800020;">${d.nom} (${d.code})</h4>
-                    <hr style="border:0;border-top:1px solid #ccc;margin:10px 0;">
-                </div>
-                <div style="margin-bottom:20px;">
-                    <p style="margin:0;font-size:0.9em;color:#666;">Rendement :</p>
-                    <p style="margin:5px 0;font-size:1.2em;font-weight:bold;">${Math.round(d.rendement)} <span style="font-size:0.7em;">hl/ha</span></p>
-                    <div style="font-size:0.85em;color:#444;background:#e9ecef;padding:4px 8px;border-radius:4px;">Classé <strong>${rankRendement}<sup>e</sup></strong> sur ${totalDepts}</div>
-                </div>
-                <div>
-                    <p style="margin:0;font-size:0.9em;color:#666;">${metricConfig.label} :</p>
-                    <p style="margin:5px 0;font-size:1.2em;font-weight:bold;">${Math.round(d[metric])}${metricConfig.unit}</p>
-                    <div style="font-size:0.85em;color:#444;background:#e9ecef;padding:4px 8px;border-radius:4px;">Classé <strong>${rankMetric}<sup>e</sup></strong> sur ${totalDepts}</div>
-                </div>
-                ${aopHTML}
-                <div style="margin-top:15px;font-size:0.8em;font-style:italic;color:#777;border-top:1px dashed #ccc;padding-top:10px;">
-                    Surface viticole : <strong>${Math.round(d.surface).toLocaleString()} ha</strong>
-                </div>`;
-        }
-    } else {
-        summaryBox.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:#999;text-align:center;"><p>Cliquez sur un département pour voir son analyse comparative.</p></div>`;
-    }
+    // ── Summary box using buildImpactFactBox ──
+    const summaryBox = buildImpactFactBox(codeSelection, combinedData, metric, metricConfigs);
 
     mapsContainer.appendChild(rendementMapContainer);
     mapsContainer.appendChild(factorMapContainer);
     mapsContainer.appendChild(summaryBox);
     container.appendChild(mapsContainer);
 
-    // Scatterplot
+    // ── Scatterplot ──
     const scatterplot = Plot.plot({
         width, height: heightPlot, marginLeft: 50, grid: true,
         style: { background: "#fafafa", padding: "10px", borderRadius: "8px" },
@@ -997,6 +949,82 @@ function renderImpactDashboard() {
     const dashboardContainer = document.getElementById('impact-dashboard');
     dashboardContainer.innerHTML = '';
     dashboardContainer.appendChild(container);
+}
+
+// ─── Impact fact box ──────────────────────────────────────────────────────────
+function buildImpactFactBox(codeSelection, combinedData, activeMetric, metricConfigs) {
+    const box = document.createElement("div");
+    box.style.cssText = `
+        flex:0 0 250px;
+        background:#f8f9fa;border:1px solid #ddd;border-radius:8px;
+        padding:12px 14px;box-sizing:border-box;
+        display:flex;flex-direction:column;gap:8px;
+        font-family:sans-serif;font-size:13px;color:#333;
+        box-shadow:0 1px 4px rgba(0,0,0,0.06);
+    `;
+
+    if (!codeSelection) {
+        box.innerHTML = `
+            <div style="text-align:center;color:#aaa;padding:24px 0;">
+                <div>Cliquez sur un département pour voir ses détails</div>
+            </div>`;
+        return box;
+    }
+
+    const d = combinedData.find(c => c.code === codeSelection);
+    if (!d) {
+        box.innerHTML = `<div style="text-align:center;color:#aaa;padding:16px 0;">Données indisponibles</div>`;
+        return box;
+    }
+
+    // Build rank for each metric
+    const metrics = [
+        { key: 'rendement', label: 'Rendement',      unit: 'hl/ha', fmt: v => Math.round(v) + ' hl/ha',  color: '#1976d2' },
+        { key: 'soleil',    label: 'Ensoleillement', unit: 'h/an',  fmt: v => Math.round(v) + ' h/an',    color: '#f39c12' },
+        { key: 'altitude',  label: 'Altitude',       unit: 'm',     fmt: v => Math.round(v) + ' m',        color: '#5d7a8a' },
+        { key: 'pente',     label: 'Pente',          unit: '%',     fmt: v => v.toFixed(1) + '%',          color: '#c0392b' },
+        { key: 'exposition',label: 'Exposition',     unit: '°',     fmt: v => Math.round(v) + '° (' + expositionToCardinal(v) + ')', color: '#8e6b3e' },
+        { key: 'surface',   label: 'Surface viticole', unit: 'ha',  fmt: v => Math.round(v).toLocaleString() + ' ha', color: '#27ae60' },
+    ];
+
+    const rankOf = (key) => {
+        const sorted = [...combinedData].filter(r => r[key] > 0).sort((a, b) => d3.descending(a[key], b[key]));
+        const r = sorted.findIndex(r => r.code === codeSelection) + 1;
+        return r > 0 ? `${r}<sup>e</sup> / ${sorted.length}` : '—';
+    };
+
+    const rowsHTML = metrics.map(m => {
+        const val = d[m.key];
+        const isActive = m.key === activeMetric;
+        return `
+        <div style="display:flex;justify-content:space-between;align-items:center;
+                    padding:5px 6px;border-radius:4px;
+                    background:${isActive ? 'rgba(128,0,32,0.08)' : 'transparent'};
+                    border-left:3px solid ${isActive ? '#800020' : 'transparent'};">
+            <div>
+                <div style="font-size:11px;color:#888;">${m.label}</div>
+                <div style="font-weight:bold;font-size:13px;color:${m.color};">${val != null && val > 0 ? m.fmt(val) : '—'}</div>
+            </div>
+            <div style="font-size:10px;color:#aaa;text-align:right;background:#e9ecef;
+                        padding:2px 5px;border-radius:3px;white-space:nowrap;">
+                ${val > 0 ? rankOf(m.key) : '—'}
+            </div>
+        </div>`;
+    }).join('');
+
+    box.innerHTML = `
+        <div style="font-weight:bold;font-size:14px;color:#800020;border-bottom:1px solid #e0e0e0;padding-bottom:6px;">
+            ${d.nom} <span style="font-size:11px;color:#888;font-weight:normal;">(${d.code})</span>
+        </div>
+        <div style="font-size:10px;color:#aaa;font-style:italic;margin-bottom:2px;">
+            Indicateur actif : <strong style="color:#800020;">${metricConfigs[activeMetric].label}</strong>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:2px;">
+            ${rowsHTML}
+        </div>
+    `;
+
+    return box;
 }
 
 // ─── Fact box builder ─────────────────────────────────────────────────────────
