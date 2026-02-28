@@ -104,6 +104,7 @@ header{
     left: 0;
     z-index: 1000;
     background-color: #4A0E17;
+    padding: 10px 50px;
 }
 .nav-links img {
     height:50px;
@@ -111,8 +112,6 @@ header{
 }
 .nav-links {
     width:100%;
-    padding:20px 0px;
-
     max-width: 1400px;
     margin: 0 auto;
     display: flex;
@@ -125,7 +124,7 @@ header{
     text-decoration: none;
     font-weight: 500;
     transition: 0.3s ease;
-    padding:10px 10px;
+    padding:5px 10px;
     border-radius:5px 5px 0 0;
     background-color: rgba(197, 160, 89, 0);
 }
