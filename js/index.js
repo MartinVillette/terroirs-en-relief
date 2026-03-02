@@ -108,6 +108,7 @@ function renderTab(tabId) {
         case 'production':      renderProductionDashboard(); break;
         case 'caracteristiques': renderCaracDashboard();     break;
         case 'impact':          renderImpactDashboard();     break;
+        case 'synthese':        renderSyntheseDashboard();   break;
     }
 }
 
@@ -222,7 +223,7 @@ function buildChoroplethMap(features, colorFn, tooltipFn, width, height, codeSel
         .attr("viewBox", [0, 0, width, height]);
 
     const projection = d3.geoConicConformal()
-        .center([2.454071, 46.279229]).scale(2200)
+        .center([2.454071, 46.279229]).scale(1800)
         .translate([width / 2, height / 2]);
     const path = d3.geoPath().projection(projection);
 
@@ -1025,6 +1026,225 @@ function buildImpactFactBox(codeSelection, combinedData, activeMetric, metricCon
     `;
 
     return box;
+}
+
+// ─── Vue Synthèse ─────────────────────────────────────────────────────────────
+function renderSyntheseDashboard() {
+    if (!dataProd || !dataSoleil || !dataTopo || !departments) {
+        document.getElementById('synthese-dashboard').innerHTML = '<div class="loading">Chargement...</div>';
+        return;
+    }
+
+    const codeSelection = departementSelectionne;
+    const W = 420, H = 380, gap = 20;
+
+    const container = document.getElementById('synthese-dashboard');
+    container.innerHTML = '';
+
+    // ── topoMap ──
+    const topoMap = new Map(dataTopo.map(d => [String(d.code_dep).padStart(2, '0'), d]));
+
+    // ── Unified data map: code → all indicators ──
+    const allDataMap = new Map();
+    dataProd.forEach(d => {
+        const code      = String(d.code_dept).padStart(2, '0');
+        const surface   = d.surf_totale || 0;
+        const prod      = d[choixVin]   || 0;
+        const rendement = surface > 20 ? prod / surface : 0;
+        const sunData   = dataSoleil.find(s => String(s.code_dept).padStart(2, '0') === code);
+        const topoData  = topoMap.get(code);
+        allDataMap.set(code, {
+            nom:        d.nom_dept,
+            production: prod,
+            rendement,
+            surface,
+            soleil:     sunData  ? sunData.heures_soleil : null,
+            altitude:   topoData ? topoData.altitude     : null,
+            pente:      topoData ? topoData.pente        : null,
+            exposition: topoData ? topoData.exposition   : null,
+        });
+    });
+
+    // ── Unified tooltip showing all indicators ──
+    const unifiedTooltip = f => {
+        const d = allDataMap.get(f.properties.code);
+        if (!d) return `<strong>${f.properties.nom}</strong><br><em>Données indisponibles</em>`;
+        return `
+            <strong>${d.nom}</strong>
+            <hr style="margin:4px 0;border:none;border-top:1px solid #ddd;">
+            Production : <strong>${d.production > 0 ? Math.round(d.production).toLocaleString() + ' hl' : '—'}</strong><br>
+            Rendement : <strong>${d.rendement  > 0 ? Math.round(d.rendement)  + ' hl/ha' : '—'}</strong><br>
+            Ensoleillement : <strong>${d.soleil    != null ? Math.round(d.soleil)    + ' h/an' : '—'}</strong><br>
+            Altitude : <strong>${d.altitude  != null ? Math.round(d.altitude)  + ' m'    : '—'}</strong><br>
+            Pente : <strong>${d.pente     != null ? d.pente.toFixed(1)         + '%'     : '—'}</strong><br>
+            Exposition : <strong>${d.exposition != null ? Math.round(d.exposition) + '° (' + expositionToCardinal(d.exposition) + ')' : '—'}</strong>
+        `;
+    };
+
+    // ── Helper: build one card ──
+    function buildSyntheseCard(cardTitle, mapFeatures, colorFn, colorScale, legendDomain, legendLabel, legendFmt) {
+        const card = document.createElement("div");
+        card.style.cssText = `
+            background:#fff;border:1px solid #ddd;border-radius:8px;
+            padding:12px;box-shadow:0 1px 4px rgba(0,0,0,0.07);
+            display:flex;flex-direction:column;gap:6px;
+        `;
+
+        const titleEl = document.createElement("div");
+        titleEl.textContent = cardTitle;
+        titleEl.style.cssText = "font-weight:bold;font-size:13px;color:#5c131e;border-bottom:1px solid #f0e0e0;padding-bottom:6px;";
+        card.appendChild(titleEl);
+
+        const mapEl = buildChoroplethMap(
+            mapFeatures, colorFn, unifiedTooltip,
+            W, H, codeSelection,
+            code => setDepartement(code),
+            1400
+        );
+        card.appendChild(mapEl);
+
+        const legendWrapper = document.createElement("div");
+        appendMapLegend(legendWrapper, colorScale, legendDomain, legendLabel, legendFmt);
+        card.appendChild(legendWrapper);
+
+        return card;
+    }
+
+    // ── 1. Production ──
+    const metricProd = choixVin;
+    const theme      = wineThemes[metricProd];
+    const maxProd    = d3.max(dataProd, d => d[metricProd]) || 10000;
+    const colorProd  = d3.scaleSequential([0, maxProd], theme.scale);
+
+    const geojsonProd = JSON.parse(JSON.stringify(departments));
+    geojsonProd.features.forEach(f => {
+        const row = dataProd.find(d => String(d.code_dept).padStart(2, '0') === f.properties.code);
+        f.properties.value = row ? row[metricProd] : 0;
+    });
+
+    const cardProd = buildSyntheseCard(
+        theme.label,
+        geojsonProd.features,
+        d => d.properties.value > 0 ? colorProd(d.properties.value) : "#eee",
+        colorProd, [0, maxProd], theme.label + " (hl)",
+        d => (d / 1000).toFixed(0) + "k"
+    );
+
+    // ── 2. Rendement ──
+    const rendData = dataProd.map(d => {
+        const code      = String(d.code_dept).padStart(2, '0');
+        const surface   = d.surf_totale || 0;
+        const production = d[choixVin]  || 0;
+        const rendement = surface > 20 ? production / surface : 0;
+        return { code, nom_dept: d.nom_dept, rendement };
+    }).filter(d => d.rendement > 0);
+
+    const maxRend   = d3.max(rendData, d => d.rendement) || 100;
+    const colorRend = d3.scaleSequential([0, maxRend], d3.interpolateYlGnBu);
+
+    const geojsonRend = JSON.parse(JSON.stringify(departments));
+    geojsonRend.features.forEach(f => {
+        const row = rendData.find(d => d.code === f.properties.code);
+        f.properties.value = row ? row.rendement : 0;
+    });
+
+    const cardRend = buildSyntheseCard(
+        "Rendement",
+        geojsonRend.features,
+        d => d.properties.value > 0 ? colorRend(d.properties.value) : "#eee",
+        colorRend, [0, maxRend], "Rendement (hl/ha)",
+        d => Math.round(d) + " hl/ha"
+    );
+
+    // ── 3. Ensoleillement ──
+    const maxSoleil   = d3.max(dataSoleil, d => d.heures_soleil) || 3000;
+    const colorSoleil = d3.scaleSequential([0, maxSoleil], d3.interpolateYlOrRd);
+
+    const geojsonSoleil = JSON.parse(JSON.stringify(departments));
+    geojsonSoleil.features.forEach(f => {
+        const row = dataSoleil.find(d => String(d.code_dept).padStart(2, '0') === f.properties.code);
+        f.properties.value = row ? row.heures_soleil : 0;
+    });
+
+    const cardSoleil = buildSyntheseCard(
+        "Ensoleillement",
+        geojsonSoleil.features,
+        d => d.properties.value > 0 ? colorSoleil(d.properties.value) : "#eee",
+        colorSoleil, [0, maxSoleil], "Ensoleillement (h/an)",
+        d => Math.round(d) + "h"
+    );
+
+    // ── 4. Altitude ──
+    const maxAlt   = d3.max(dataTopo, d => d.altitude) || 500;
+    const colorAlt = d3.scaleSequential([0, maxAlt], d3.interpolateGnBu);
+
+    const geojsonAlt = JSON.parse(JSON.stringify(departments));
+    geojsonAlt.features.forEach(f => {
+        const row = topoMap.get(f.properties.code);
+        f.properties.value = row ? row.altitude : 0;
+    });
+
+    const cardAlt = buildSyntheseCard(
+        "Altitude moyenne",
+        geojsonAlt.features,
+        d => d.properties.value > 0 ? colorAlt(d.properties.value) : "#eee",
+        colorAlt, [0, maxAlt], "Altitude (m)",
+        d => Math.round(d) + "m"
+    );
+
+    // ── 5. Pente ──
+    const maxPente   = d3.max(dataTopo, d => d.pente) || 15;
+    const colorPente = d3.scaleSequential([0, maxPente], d3.interpolateReds);
+
+    const geojsonPente = JSON.parse(JSON.stringify(departments));
+    geojsonPente.features.forEach(f => {
+        const row = topoMap.get(f.properties.code);
+        f.properties.value = row ? row.pente : 0;
+    });
+
+    const cardPente = buildSyntheseCard(
+        "Pente moyenne",
+        geojsonPente.features,
+        d => d.properties.value > 0 ? colorPente(d.properties.value) : "#eee",
+        colorPente, [0, maxPente], "Pente (%)",
+        d => d.toFixed(1) + "%"
+    );
+
+    // ── 6. Exposition ──
+    const maxExpo   = 360;
+    const colorExpo = d3.scaleSequential([0, maxExpo], d3.interpolateYlOrBr);
+
+    const geojsonExpo = JSON.parse(JSON.stringify(departments));
+    geojsonExpo.features.forEach(f => {
+        const row = topoMap.get(f.properties.code);
+        f.properties.value = row ? row.exposition : 0;
+    });
+
+    const cardExpo = buildSyntheseCard(
+        "Exposition moyenne",
+        geojsonExpo.features,
+        d => d.properties.value > 0 ? colorExpo(d.properties.value) : "#eee",
+        colorExpo, [0, maxExpo], "Exposition (°)",
+        d => Math.round(d) + "°"
+    );
+
+    // ── Grid ──
+    const grid = document.createElement("div");
+    grid.style.cssText = `
+        display:grid;
+        grid-template-columns:${W}px ${W}px ${W}px;
+        gap:${gap}px;
+        align-items:start;
+    `;
+
+    grid.appendChild(cardProd);
+    grid.appendChild(cardRend);
+    grid.appendChild(cardSoleil);
+    grid.appendChild(cardAlt);
+    grid.appendChild(cardPente);
+    grid.appendChild(cardExpo);
+
+    container.appendChild(grid);
 }
 
 // ─── Fact box builder ─────────────────────────────────────────────────────────
