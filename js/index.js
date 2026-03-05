@@ -299,14 +299,15 @@ function renderDistributionChart(data, metric, unit, colorScale, width, height, 
  * @param {number}   height
  * @param {string}   codeSelection
  * @param {function} onClickFn    - code => void
+ * @param {number} scale          - map scale
  */
-function buildChoroplethMap(features, colorFn, tooltipFn, width, height, codeSelection, onClickFn) {
+function buildChoroplethMap(features, colorFn, tooltipFn, width, height, codeSelection, onClickFn, scale = 2600) {
     const svg = d3.create("svg")
         .attr("width", width).attr("height", height)
         .attr("viewBox", [0, 0, width, height]);
 
     const projection = d3.geoConicConformal()
-        .center([2.454071, 46.279229]).scale(1800)
+        .center([2.454071, 46.279229]).scale(scale)
         .translate([width / 2, height / 2]);
     const path = d3.geoPath().projection(projection);
 
@@ -671,7 +672,7 @@ function renderCaracTopo(metric) {
 
     let mapEl;
     if (metric === "exposition") {
-        mapEl = buildExpositionMap(geojson.features, enriched, widthMap, heightMap, codeSelection);
+        mapEl = buildExpositionMap(geojson.features, enriched, widthMap, heightMap, codeSelection, d => `<strong>${d.properties.nom}</strong><br>Exposition : <strong>${Math.round(d.properties.value)}°</strong>`);
     } else {
         mapEl = buildChoroplethMap(
             geojson.features,
@@ -740,7 +741,7 @@ function renderCaracTopo(metric) {
 
     const histChart = metric !== "exposition"
         ? renderDistributionChart(enriched, metric, cfg.unit, colorScale, histWidth, 380,
-            `Répartition par ${cfg.label.toLowerCase()}`)
+            `Répartition des départements par ${cfg.label.toLowerCase()}`)
         : document.createElement("div");
 
     const layout = buildDashboardLayout(
@@ -756,9 +757,9 @@ function renderCaracTopo(metric) {
     container.appendChild(layout);
 }
 
-function buildExpositionMap(features, enriched, width, height, codeSelection) {
+function buildExpositionMap(features, enriched, width, height, codeSelection, tooltipFunction, scale = 2600) {
     const svg = d3.create("svg").attr("width", width).attr("height", height).attr("viewBox", [0, 0, width, height]);
-    const projection = d3.geoConicConformal().center([2.454071, 46.279229]).scale(2600).translate([width / 2, height / 2]);
+    const projection = d3.geoConicConformal().center([2.454071, 46.279229]).scale(scale).translate([width / 2, height / 2]);
     const path = d3.geoPath().projection(projection);
     const g = svg.append("g");
 
@@ -772,7 +773,7 @@ function buildExpositionMap(features, enriched, width, height, codeSelection) {
         .on("mouseover", function(e, d) {
             d3.select(this).attr("stroke", "#333").attr("stroke-width", 2).raise();
             g.selectAll(".arrow-group").raise();
-            showTooltip(e, `<strong>${d.properties.nom}</strong><br>Exposition : <strong>${Math.round(d.properties.value)}° (${expositionToCardinal(d.properties.value)})</strong>`);
+            showTooltip(e, tooltipFunction(d));
         })
         .on("mousemove", moveTooltip)
         .on("mouseout", function(e, d) {
@@ -796,7 +797,7 @@ function buildExpositionMap(features, enriched, width, height, codeSelection) {
         const arrowGroup = g.append("g").attr("class", "arrow-group")
             .attr("transform", `translate(${centroid[0]},${centroid[1]})`).attr("cursor", "pointer")
             .on("click", () => setDepartement(feature.properties.code))
-            .on("mouseover", e => showTooltip(e, `<strong>${feature.properties.nom}</strong><br>Exposition : <strong>${Math.round(angleDeg)}° (${expositionToCardinal(angleDeg)})</strong>`))
+            .on("mouseover", e => showTooltip(e, tooltipFunction(feature)))
             .on("mousemove", moveTooltip).on("mouseout", hideTooltip);
 
         const dx = Math.cos(angleRad) * arrowLen, dy = Math.sin(angleRad) * arrowLen;
@@ -941,21 +942,27 @@ function renderImpactDashboard() {
     const unifiedTooltip = (f) => {
         const info = f.properties.info;
         if (!info) return `<strong>${f.properties.nom}</strong><br><em>Données indisponibles</em>`;
+        const metricValue = metric === 'exposition' 
+            ? Math.round(info[metric]) + '° (' + expositionToCardinal(info[metric]) + ')'
+            : metric === 'altitude'
+            ? Math.round(info[metric]) + ' m'
+            : metric === 'pente'
+            ? info[metric].toFixed(1) + '%'
+            : Math.round(info[metric]) + metricConfig.unit;
         return `
             <strong>${info.nom}</strong>
             <hr style="margin:4px 0;border:none;border-top:1px solid #ddd;">
-            📊 Rendement : <strong>${Math.round(info.rendement)} hl/ha</strong><br>
-            ☀️ Ensoleillement : <strong>${info.soleil    > 0 ? Math.round(info.soleil)    + ' h/an' : '—'}</strong><br>
-            ⛰️ Altitude : <strong>${info.altitude  > 0 ? Math.round(info.altitude)  + ' m'    : '—'}</strong><br>
-            📐 Pente : <strong>${info.pente     > 0 ? info.pente.toFixed(1)          + '%'     : '—'}</strong><br>
-            🧭 Exposition : <strong>${info.exposition > 0 ? Math.round(info.exposition) + '° (' + expositionToCardinal(info.exposition) + ')' : '—'}</strong><br>
-            🌾 Surface : <strong>${Math.round(info.surface).toLocaleString()} ha</strong>
+            Rendement : <strong>${Math.round(info.rendement)} hl/ha</strong><br>
+            ${metric === 'soleil' ? 'Ensoleillement' : metric === 'altitude' ? 'Altitude' : metric === 'pente' ? 'Pente' : 'Exposition'} : <strong>${metricValue}</strong><br>
+            Surface : <strong>${Math.round(info.surface).toLocaleString()} ha</strong>
         `;
     };
 
     // ── Two maps side by side + fact box ──
     const mapsContainer = document.createElement("div");
     mapsContainer.style.cssText = "display:flex;gap:20px;margin-bottom:20px;align-items:flex-start;";
+
+    const reducedScale = 2600 * (widthMap / 500); // Reduced scale for side by side display
 
     // Map 1: Rendement
     const geojsonR = JSON.parse(JSON.stringify(departments));
@@ -976,7 +983,8 @@ function renderImpactDashboard() {
         d => d.properties.value > 0 ? colorScaleRendement(d.properties.value) : "#eee",
         unifiedTooltip,
         widthMap, heightMap, codeSelection,
-        code => setDepartement(code)
+        code => setDepartement(code),
+        reducedScale
     ));
     appendMapLegend(rendementMapContainer, colorScaleRendement,
         [0, d3.max(combinedData, d => d.rendement) || 100],
@@ -996,16 +1004,29 @@ function renderImpactDashboard() {
     factorTitle.textContent = metricConfig.label;
     factorTitle.style.cssText = "text-align:center;color:#555;margin:0 0 5px 0;font-size:0.95em;";
     factorMapContainer.appendChild(factorTitle);
-    factorMapContainer.appendChild(buildChoroplethMap(
-        geojsonF.features,
-        d => d.properties.value > 0 ? colorScaleFactor(d.properties.value) : "#eee",
-        unifiedTooltip,
-        widthMap, heightMap, codeSelection,
-        code => setDepartement(code)
-    ));
-    appendMapLegend(factorMapContainer, colorScaleFactor,
-        [0, d3.max(combinedData, d => d[metric]) || 100],
-        metricConfig.label + metricConfig.unit, d => Math.round(d) + metricConfig.unit);
+    
+    // Use vector map for exposition, choropleth for others
+    if (metric === 'exposition') {
+        factorMapContainer.appendChild(buildExpositionMap(
+            geojsonF.features,
+            combinedData,
+            widthMap, heightMap, codeSelection,
+            unifiedTooltip,
+            reducedScale
+        ));
+    } else {
+        factorMapContainer.appendChild(buildChoroplethMap(
+            geojsonF.features,
+            d => d.properties.value > 0 ? colorScaleFactor(d.properties.value) : "#eee",
+            unifiedTooltip,
+            widthMap, heightMap, codeSelection,
+            code => setDepartement(code),
+            reducedScale
+        ));
+        appendMapLegend(factorMapContainer, colorScaleFactor,
+            [0, d3.max(combinedData, d => d[metric]) || 100],
+            metricConfig.label + metricConfig.unit, d => Math.round(d) + metricConfig.unit);
+    }
 
     // Fact box
     const summaryBox = buildImpactFactBox(codeSelection, combinedData, metric, metricConfigs);
@@ -1337,7 +1358,7 @@ function renderSyntheseDashboard() {
             mapFeatures, colorFn, unifiedTooltip,
             W, H, codeSelection,
             code => setDepartement(code),
-            1400
+            1800
         );
         card.appendChild(mapEl);
 
