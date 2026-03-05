@@ -2,6 +2,7 @@ import geopandas as gpd
 import pandas as pd
 import numpy as np
 import os
+import json
 
 # --- CONFIGURATION ---
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -154,6 +155,23 @@ df_dep = (
 csv_dep = os.path.join(PROCESSED_DATA_DIR, "topo_par_departement.csv")
 df_dep.to_csv(csv_dep, index=False)
 print(f"   [OK] {csv_dep}  ({len(df_dep)} départements)")
+
+# ==============================================================================
+# ÉTAPE 5 : EXPORT APPELLATIONS PAR DÉPARTEMENT (JSON)
+# ==============================================================================
+print("5. Génération : appellations par département (JSON)...")
+
+aoc_par_dept = (
+    vignes_uniques
+    .groupby('code_dep')[col_nom_aoc]
+    .apply(lambda x: sorted(x.dropna().unique()))
+    .to_dict()
+)
+
+json_aoc_dept = os.path.join(PROCESSED_DATA_DIR, "aoc_par_departement.json")
+with open(json_aoc_dept, 'w', encoding='utf-8') as f:
+    json.dump(aoc_par_dept, f, ensure_ascii=False, indent=2)
+print(f"   [OK] {json_aoc_dept}  ({len(aoc_par_dept)} départements)")
 
 print("=" * 30)
 print("TRAITEMENT TERMINÉ")
