@@ -1,6 +1,5 @@
 # Data files
 *.parquet
-*.json
 data/raw
 *.pkl
 *.h5
