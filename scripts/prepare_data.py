@@ -10,8 +10,8 @@ RAW_DATA_DIR = os.path.join(BASE_DIR, "data", "raw")
 PROCESSED_DATA_DIR = os.path.join(BASE_DIR, "data", "processed")
 
 PARQUET_PATH       = os.path.join(RAW_DATA_DIR, "RPG2023_sol_climat.parquet")
-SHAPEFILE_AOC_DIR  = os.path.join(RAW_DATA_DIR, "2026-01-06-delim-parcellaire-aoc-shp")
-SHAPEFILE_AOC      = os.path.join(SHAPEFILE_AOC_DIR, "2026-01-06_delim-parcellaire-aoc-shp.shp")
+SHAPEFILE_AOC_DIR  = os.path.join(RAW_DATA_DIR, "2026-03-02-delim-parcellaire-aoc-shp")
+SHAPEFILE_AOC      = os.path.join(SHAPEFILE_AOC_DIR, "2026-03-02_delim-parcellaire-aoc-shp.shp")
 PRODUCTION_CSV_PATH = os.path.join(RAW_DATA_DIR, "production_vins_2024_clean.csv")
 
 os.makedirs(PROCESSED_DATA_DIR, exist_ok=True)
@@ -62,7 +62,7 @@ print("1. Chargement et nettoyage des données...")
 
 col_nom_aoc = 'app'
 aoc_gdf = gpd.read_file(SHAPEFILE_AOC)
-aoc_gdf = aoc_gdf[[col_nom_aoc, 'geometry']]
+aoc_gdf = aoc_gdf[[col_nom_aoc, 'insee']]
 if aoc_gdf.crs is None:
     aoc_gdf.set_crs("EPSG:2154", inplace=True)
 else:
@@ -161,12 +161,20 @@ print(f"   [OK] {csv_dep}  ({len(df_dep)} départements)")
 # ==============================================================================
 print("5. Génération : appellations par département (JSON)...")
 
+aoc_gdf["department"] = aoc_gdf["insee"].str[:2]
 aoc_par_dept = (
-    vignes_uniques
-    .groupby('code_dep')[col_nom_aoc]
-    .apply(lambda x: sorted(x.dropna().unique()))
+    aoc_gdf
+    .groupby('department')[col_nom_aoc]
+    .apply(lambda x: x.dropna().value_counts().index.tolist())
     .to_dict()
 )
+
+# aoc_par_dept = (
+#     vignes_uniques
+#     .groupby('code_dep')[col_nom_aoc]
+#     .apply(lambda x: sorted(x.dropna().unique()))
+#     .to_dict()
+# )
 
 json_aoc_dept = os.path.join(PROCESSED_DATA_DIR, "aop_par_departement.json")
 with open(json_aoc_dept, 'w', encoding='utf-8') as f:
