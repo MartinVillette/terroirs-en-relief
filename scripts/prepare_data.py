@@ -168,7 +168,7 @@ aoc_par_dept = (
     .to_dict()
 )
 
-json_aoc_dept = os.path.join(PROCESSED_DATA_DIR, "aoc_par_departement.json")
+json_aoc_dept = os.path.join(PROCESSED_DATA_DIR, "aop_par_departement.json")
 with open(json_aoc_dept, 'w', encoding='utf-8') as f:
     json.dump(aoc_par_dept, f, ensure_ascii=False, indent=2)
 print(f"   [OK] {json_aoc_dept}  ({len(aoc_par_dept)} départements)")
