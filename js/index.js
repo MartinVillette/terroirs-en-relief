@@ -2,6 +2,7 @@
 let dataProd     = null;
 let dataSoleil   = null;
 let dataTopo     = null;
+let dataAop      = null; // code_dept => [aop1, aop2, ...]
 let departments  = null;
 
 let departementSelectionne = null; // always a padded string e.g. "33" or null
@@ -22,38 +23,6 @@ function setDepartement(code) {
 function rerenderAllRenderedTabs() {
     renderedTabs.forEach(tabId => renderTab(tabId));
 }
-
-// ─── AOP mapping ──────────────────────────────────────────────────────────────
-const aopParDepartement = {
-    "33": ["Bordeaux", "Bordeaux Supérieur", "Médoc", "Haut-Médoc", "Margaux", "Pauillac", "Saint-Estèphe", "Saint-Julien", "Pessac-Léognan", "Graves", "Sauternes", "Pomerol", "Saint-Émilion"],
-    "34": ["Languedoc", "Faugères", "Saint-Chinian", "Picpoul de Pinet"],
-    "11": ["Corbières", "Fitou", "Minervois", "Limoux"],
-    "51": ["Champagne"], "10": ["Champagne"], "02": ["Champagne"],
-    "21": ["Bourgogne", "Côte de Nuits", "Côte de Beaune", "Gevrey-Chambertin", "Pommard", "Meursault"],
-    "71": ["Mâcon", "Pouilly-Fuissé", "Saint-Véran"],
-    "69": ["Beaujolais", "Brouilly", "Morgon", "Fleurie", "Moulin-à-Vent"],
-    "13": ["Côtes de Provence", "Coteaux d'Aix-en-Provence", "Bandol", "Cassis"],
-    "83": ["Côtes de Provence", "Bandol"],
-    "84": ["Côtes du Rhône", "Châteauneuf-du-Pape", "Gigondas", "Vacqueyras"],
-    "30": ["Côtes du Rhône", "Costières de Nîmes"],
-    "26": ["Côtes du Rhône", "Crozes-Hermitage", "Hermitage", "Saint-Joseph"],
-    "07": ["Côtes du Rhône", "Saint-Joseph", "Cornas"],
-    "67": ["Alsace", "Alsace Grand Cru", "Crémant d'Alsace"],
-    "68": ["Alsace", "Alsace Grand Cru", "Crémant d'Alsace"],
-    "37": ["Vouvray", "Montlouis", "Chinon", "Bourgueil"],
-    "49": ["Anjou", "Saumur", "Saumur-Champigny", "Coteaux du Layon"],
-    "44": ["Muscadet", "Muscadet-Sèvre-et-Maine"],
-    "85": ["Fiefs Vendéens"], "17": ["Cognac", "Pineau des Charentes"],
-    "16": ["Cognac", "Pineau des Charentes"],
-    "24": ["Bergerac", "Monbazillac", "Pécharmant"],
-    "47": ["Côtes du Marmandais", "Buzet"],
-    "32": ["Côtes de Gascogne", "Saint-Mont"],
-    "64": ["Jurançon", "Madiran", "Irouléguy"],
-    "66": ["Côtes du Roussillon", "Collioure", "Banyuls"],
-    "2A": ["Ajaccio"], "2B": ["Patrimonio"],
-    "39": ["Côtes du Jura", "Arbois", "L'Étoile"],
-    "89": ["Chablis"], "18": ["Sancerre", "Menetou-Salon", "Quincy"]
-};
 
 // ─── Tooltip ──────────────────────────────────────────────────────────────────
 const tooltip = d3.select("body").append("div")
@@ -198,17 +167,19 @@ function renderTab(tabId) {
 // ─── Data loading ─────────────────────────────────────────────────────────────
 async function loadData() {
     try {
-        const [prodData, deptData, sunData, topoData] = await Promise.all([
+        const [prodData, deptData, sunData, topoData, aopData] = await Promise.all([
             d3.csv("data/processed/production_vins_2024_clean.csv", d3.autoType),
             d3.json("https://raw.githubusercontent.com/gregoiredavid/france-geojson/master/departements.geojson"),
             d3.csv("data/processed/ensoleillement_france_2024.csv", d3.autoType),
             // d3.csv("data/processed/topo_par_departement_old.csv", d3.autoType),
             d3.csv("data/processed/topo_par_departement.csv", d3.autoType),
+            d3.json("data/processed/aop_par_departement.json", d3.autoType)
         ]);
         dataProd   = prodData;
         departments = deptData;
         dataSoleil  = sunData;
         dataTopo    = topoData;
+        dataAop     = aopData;
 
         renderProductionDashboard();
         renderedTabs.add('production');
@@ -1548,7 +1519,7 @@ function buildFactBox(codeSelection, data, metric, colorScale, unit, formatFn, a
     const val      = d[metric];
     const valColor = colorScale(val);
     const nom      = d.nom_dept || d.nom || codeSelection;
-    const aopList  = aopParDepartement[codeSelection] || [];
+    const aopList  = dataAop[codeSelection] || [];
 
     box.innerHTML = `
         <div style="font-weight:bold;font-size:14px;color:${accentColor};border-bottom:1px solid #e0e0e0;padding-bottom:6px;">
