@@ -13,6 +13,72 @@ let facteurX     = 'soleil';       // impact factor
 
 const renderedTabs = new Set();
 
+const metricConfigs = {
+    rendement: {
+        key: "rendement",
+        label: "Rendement",
+        axisLabel: "Rendement (hl/ha)",
+        cardTitle: "Rendement",
+        unit: "hl/ha",
+        interpolator: d3.interpolateBlues,
+        domainMax: 100,
+        accentColor: "#1976d2",
+        formatValue: v => `${Math.round(v)} hl/ha`,
+        formatLegendTick: v => `${Math.round(v)} hl/ha`,
+    },
+    soleil: {
+        key: "soleil",
+        sourceKey: "heures_soleil",
+        label: "Ensoleillement",
+        axisLabel: "Ensoleillement (h/an)",
+        cardTitle: "Ensoleillement",
+        unit: "h/an",
+        interpolator: d3.interpolateYlOrRd,
+        domainMax: null,
+        accentColor: "#f39c12",
+        formatValue: v => `${Math.round(v)} h/an`,
+        formatLegendTick: v => `${Math.round(v)}h`,
+    },
+    altitude: {
+        key: "altitude",
+        label: "Altitude",
+        axisLabel: "Altitude Moyenne (m)",
+        cardTitle: "Altitude moyenne",
+        unit: "m",
+        interpolator: d3.interpolateGnBu,
+        domainMax: null,
+        accentColor: "#5d7a8a",
+        formatValue: v => `${Math.round(v)} m`,
+        formatLegendTick: v => `${Math.round(v)}m`,
+    },
+    pente: {
+        key: "pente",
+        label: "Pente",
+        axisLabel: "Pente Moyenne (%)",
+        cardTitle: "Pente moyenne",
+        unit: "%",
+        interpolator: d3.interpolateOranges,
+        domainMax: 15,
+        accentColor: "#c0392b",
+        formatValue: v => `${Number(v).toFixed(1)}%`,
+        formatLegendTick: v => `${Number(v).toFixed(1)}%`,
+    },
+    exposition: {
+        key: "exposition",
+        label: "Exposition",
+        axisLabel: "Exposition Moyenne (°)",
+        cardTitle: "Exposition moyenne",
+        unit: "°",
+        interpolator: d3.interpolateYlOrBr,
+        domainMax: 360,
+        accentColor: "#8e6b3e",
+        formatValue: (v, withCardinal = false) => withCardinal
+            ? `${Math.round(v)}° (${expositionToCardinal(v)})`
+            : `${Math.round(v)}°`,
+        formatLegendTick: v => `${Math.round(v)}°`,
+    },
+};
+
 // ─── Department selection ─────────────────────────────────────────────────────
 function setDepartement(code) {
     const normalized = code ? String(code).padStart(2, '0') : null;
@@ -234,6 +300,32 @@ function appendMapSource(containerDiv, source, url = null) {
     containerDiv.appendChild(div);
 }
 
+function hexToRgba(hex, alpha) {
+    const normalized = String(hex).replace('#', '');
+    const isShort = normalized.length === 3;
+    const fullHex = isShort
+        ? normalized.split('').map(ch => ch + ch).join('')
+        : normalized;
+    const intVal = Number.parseInt(fullHex, 16);
+    if (Number.isNaN(intVal) || fullHex.length !== 6) {
+        return `rgba(92, 19, 30, ${alpha})`;
+    }
+    const r = (intVal >> 16) & 255;
+    const g = (intVal >> 8) & 255;
+    const b = intVal & 255;
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function buildInfoBubble(htmlContent, accentColor = "#c5a059") {
+    const bubble = document.createElement("div");
+    bubble.className = "dashboard-info-bubble";
+    bubble.style.setProperty("--bubble-accent", accentColor);
+    bubble.style.setProperty("--bubble-bg", hexToRgba(accentColor, 0.12));
+    bubble.style.setProperty("--bubble-border", hexToRgba(accentColor, 0.38));
+    bubble.innerHTML = htmlContent;
+    return bubble;
+}
+
 function renderDistributionChart(data, metric, unit, colorScale, width, height, title) {
     const values = data.map(d => d[metric]).filter(v => v != null && v > 0);
     const binGenerator = d3.bin().thresholds(12)(values);
@@ -443,9 +535,21 @@ function renderProductionVolume(widthMap, heightMap, widthChart, heightChart, to
     const factBox = buildFactBox(codeSelection, dataProd, metric, colorScale, "hl",
         d => (d[metric] / 1000).toFixed(0) + "k hl", theme.color);
 
+    const infoBubble = buildInfoBubble(`
+        <strong>Contexte</strong><br>
+        Les plus gros volumes se concentrent dans quelques zones clés :
+        la Gironde (Bordeaux, surtout vins rouges), la Marne (Champagne)
+        et le pourtour méditerranéen pour les rosés.
+    `, theme.color);
+
+    const topRightContent = document.createElement("div");
+    topRightContent.style.cssText = "display:flex;flex-direction:column;gap:10px;";
+    topRightContent.appendChild(infoBubble);
+    topRightContent.appendChild(factBox);
+
     const layout = buildDashboardLayout(
         mapEl, legendDiv.firstChild, sourceDiv.firstChild,
-        barChart, histChart, factBox,
+        barChart, histChart, topRightContent,
         widthMap, widthChart, heightMap
     );
 
@@ -455,6 +559,8 @@ function renderProductionVolume(widthMap, heightMap, widthChart, heightChart, to
 }
 
 function renderProductionRendement(widthMap, heightMap, widthChart, heightChart, totalWidth, codeSelection) {
+    const cfg = metricConfigs.rendement;
+
     const combinedData = dataProd.map(d => {
         const code       = String(d.code_dept).padStart(2, '0');
         const surface    = d.surf_totale || 0;
@@ -463,8 +569,8 @@ function renderProductionRendement(widthMap, heightMap, widthChart, heightChart,
         return { code, nom_dept: d.nom_dept, surface, production, rendement };
     }).filter(d => d.rendement > 0);
 
-    const maxVal = d3.max(combinedData, d => d.rendement) || 100;
-    const colorScale = d3.scaleSequential([0, maxVal], d3.interpolateYlGnBu);
+    const maxVal = d3.max(combinedData, d => d.rendement) || cfg.domainMax;
+    const colorScale = d3.scaleSequential([0, maxVal], cfg.interpolator);
 
     const geojson = JSON.parse(JSON.stringify(departments));
     geojson.features.forEach(f => {
@@ -481,7 +587,7 @@ function renderProductionRendement(widthMap, heightMap, widthChart, heightChart,
     );
 
     const legendDiv = document.createElement("div");
-    appendMapLegend(legendDiv, colorScale, [0, maxVal], "Rendement (hl/ha)", d => Math.round(d) + " hl/ha");
+    appendMapLegend(legendDiv, colorScale, [0, maxVal], cfg.axisLabel, cfg.formatLegendTick);
 
     const sourceDiv = document.createElement("div");
     appendMapSource(sourceDiv, "Douane.gouv", "https://www.douane.gouv.fr/la-douane/opendata/mots-cles/recolte");
@@ -491,7 +597,7 @@ function renderProductionRendement(widthMap, heightMap, widthChart, heightChart,
     const barChart = Plot.plot({
         title: "Top 10 : Rendement (hl/ha)",
         marginLeft: 140, width: widthChart, height: heightChart,
-        x: { label: "hl/ha", grid: true },
+        x: { label: cfg.unit, grid: true },
         y: { label: null },
         marks: [
             Plot.barX(topData, {
@@ -501,7 +607,7 @@ function renderProductionRendement(widthMap, heightMap, widthChart, heightChart,
             }),
             Plot.text(topData, {
                 x: "rendement", y: "nom_dept",
-                text: d => Math.round(d.rendement) + " hl/ha",
+                text: d => cfg.formatValue(d.rendement),
                 textAnchor: "start", dx: 5, fill: "#444", fontSize: 10
             })
         ]
@@ -510,16 +616,28 @@ function renderProductionRendement(widthMap, heightMap, widthChart, heightChart,
     const factBoxWidth = 220;
     const histWidth = widthMap + widthChart + 20 - 20 - factBoxWidth;
     const histChart = renderDistributionChart(
-        combinedData, "rendement", "hl/ha", colorScale, histWidth, 380,
+        combinedData, "rendement", cfg.unit, colorScale, histWidth, 380,
         "Répartition des départements par rendement"
     );
 
-    const factBox = buildFactBox(codeSelection, combinedData, "rendement", colorScale, "hl/ha",
-        d => Math.round(d.rendement) + " hl/ha", "#1976d2");
+    const factBox = buildFactBox(codeSelection, combinedData, "rendement", colorScale, cfg.unit,
+        d => cfg.formatValue(d.rendement), cfg.accentColor);
+
+    const infoBubble = buildInfoBubble(`
+        <strong>Contexte</strong><br>
+        Le rendement correspond au rapport <strong>volume / surface</strong> (hl/ha).
+        Certaines régions montent haut avec une aire AOP limitée (ex. Champagne, vins d’Alsace),
+        alors que la Gironde recule dans ce classement car sa surface cultivée est très étendue.
+    `, cfg.accentColor);
+
+    const topRightContent = document.createElement("div");
+    topRightContent.style.cssText = "display:flex;flex-direction:column;gap:10px;";
+    topRightContent.appendChild(infoBubble);
+    topRightContent.appendChild(factBox);
 
     const layout = buildDashboardLayout(
         mapEl, legendDiv.firstChild, sourceDiv.firstChild,
-        barChart, histChart, factBox,
+        barChart, histChart, topRightContent,
         widthMap, widthChart, heightMap
     );
 
@@ -542,11 +660,13 @@ function renderCaracDashboard() {
 function renderCaracSoleil() {
     if (!dataSoleil) return;
 
+    const cfg = metricConfigs.soleil;
+
     const widthMap = 500, heightMap = 500, widthChart = 420, heightChart = 380;
     const codeSelection = departementSelectionne;
 
     const maxVal = d3.max(dataSoleil, d => d.heures_soleil) || 3000;
-    const colorScale = d3.scaleSequential([0, maxVal], d3.interpolateYlOrRd);
+    const colorScale = d3.scaleSequential([0, maxVal], cfg.interpolator);
 
     const geojson = JSON.parse(JSON.stringify(departments));
     geojson.features.forEach(f => {
@@ -563,7 +683,7 @@ function renderCaracSoleil() {
     );
 
     const legendDiv = document.createElement("div");
-    appendMapLegend(legendDiv, colorScale, [0, maxVal], "Ensoleillement (h/an)", d => Math.round(d) + "h");
+    appendMapLegend(legendDiv, colorScale, [0, maxVal], cfg.axisLabel, cfg.formatLegendTick);
 
     const sourceDiv = document.createElement("div");
     appendMapSource(sourceDiv, "linternaute.com", "https://www.petitlopin.fr/?map=ensoleillement");
@@ -572,7 +692,7 @@ function renderCaracSoleil() {
     const barChart = Plot.plot({
         title: "Top 10 : Ensoleillement (h/an)",
         marginLeft: 140, width: widthChart, height: heightChart,
-        x: { label: "h/an", grid: true, tickFormat: "s" },
+        x: { label: cfg.unit, grid: true, tickFormat: "s" },
         y: { label: null },
         marks: [
             Plot.barX(dataSoleil, {
@@ -592,13 +712,13 @@ function renderCaracSoleil() {
     const factBoxWidth = 220;
     const histWidth = widthMap + widthChart + 20 - 20 - factBoxWidth;
     const histChart = renderDistributionChart(
-        dataSoleil, "heures_soleil", "h/an", colorScale, histWidth, 380,
+        dataSoleil, "heures_soleil", cfg.unit, colorScale, histWidth, 380,
         "Répartition des départements par ensoleillement"
     );
 
     const dataForFact = dataSoleil.map(d => ({ ...d, code: String(d.code_dept).padStart(2, '0') }));
-    const factBox = buildFactBox(codeSelection, dataForFact, "heures_soleil", colorScale, "h/an",
-        d => Math.round(d.heures_soleil) + " h/an", "#f39c12");
+    const factBox = buildFactBox(codeSelection, dataForFact, "heures_soleil", colorScale, cfg.unit,
+        d => cfg.formatValue(d.heures_soleil), cfg.accentColor);
 
     const layout = buildDashboardLayout(
         mapEl, legendDiv.firstChild, sourceDiv.firstChild,
@@ -625,13 +745,7 @@ function renderCaracTopo(metric) {
         nom_dept: deptNamesMap.get(String(d.code_dep).padStart(2, '0')) || `Dept ${d.code_dep}`
     }));
 
-    const configs = {
-        pente:      { interpolator: d3.interpolateReds,   domainMax: 15,   label: "Pente",      unit: "%" },
-        altitude:   { interpolator: d3.interpolateGnBu,   domainMax: null, label: "Altitude",   unit: "m" },
-        exposition: { interpolator: d3.interpolateYlOrBr, domainMax: 360,  label: "Exposition", unit: "°" }
-    };
-
-    const cfg = configs[metric];
+    const cfg = metricConfigs[metric];
     const domainMax  = cfg.domainMax || d3.max(enriched, d => d[metric]) || 100;
     const colorScale = d3.scaleSequential([0, domainMax], cfg.interpolator);
 
@@ -658,7 +772,7 @@ function renderCaracTopo(metric) {
     if (metric !== "exposition") {
         const legendDiv = document.createElement("div");
         appendMapLegend(legendDiv, colorScale, [0, domainMax], `${cfg.label} (${cfg.unit})`,
-            d => metric === "altitude" ? Math.round(d) + "m" : d.toFixed(1) + cfg.unit);
+            cfg.formatLegendTick);
         legendEl = legendDiv.firstChild;
     } else {
         legendEl = document.createElement("div");
@@ -678,6 +792,19 @@ function renderCaracTopo(metric) {
     if (metric === "exposition") {
         // Rose chart goes TOP RIGHT, bottom right is empty
         topRightEl    = renderExpositionRoseChart(enriched, codeSelection, widthChart, heightChart);
+
+        const infoBubble = buildInfoBubble(`
+            <strong>Contexte</strong><br>
+            L’exposition indique l’orientation moyenne des pentes viticoles.
+            Même si les valeurs sont variées selon les départements,
+            la moyenne tend vers le <strong>Sud</strong>, favorable à un meilleur ensoleillement.
+        `, metricConfigs.exposition.accentColor);
+        const topRightWrapper = document.createElement("div");
+        topRightWrapper.style.cssText = "display:flex;flex-direction:column;gap:10px;";
+        topRightWrapper.appendChild(infoBubble);
+        topRightWrapper.appendChild(topRightEl);
+        topRightEl = topRightWrapper;
+
         bottomRightEl = document.createElement("div");
     } else {
         const topData = [...enriched].filter(d => d[metric] > 0)
@@ -701,8 +828,8 @@ function renderCaracTopo(metric) {
             ]
         });
         topRightEl    = buildFactBox(codeSelection, enriched, metric, colorScale, cfg.unit,
-            d => metric === "altitude" ? Math.round(d[metric]) + "m" : d[metric].toFixed(1) + cfg.unit,
-            d3.schemeTableau10[Object.keys(configs).indexOf(metric)]);
+            d => cfg.formatValue(d[metric]),
+            cfg.accentColor);
         bottomRightEl = barChart;
     }
 
@@ -855,7 +982,7 @@ function renderExpositionRoseChart(data, codeSelection, width, height) {
     return svg.node();
 }
 
-// ...existing code...
+// ...existing code...w
 
 // ─── Impact Dashboard ─────────────────────────────────────────────────────────
 function renderImpactDashboard() {
@@ -886,21 +1013,9 @@ function renderImpactDashboard() {
         };
     }).filter(d => d.rendement > 0 && d[metric] > 0);
 
-    const metricConfigs = {
-        soleil:     { interpolator: d3.interpolateYlOrRd, label: "Ensoleillement", unit: " h/an" },
-        altitude:   { interpolator: d3.interpolateGnBu,   label: "Altitude",       unit: " m"    },
-        pente:      { interpolator: d3.interpolateReds,   label: "Pente",          unit: "%"     },
-        exposition: { interpolator: d3.interpolateYlOrBr, label: "Exposition",     unit: "°"     },
-    };
     const metricConfig = metricConfigs[metric];
-    const labels = {
-        soleil:     "Ensoleillement (h/an)",
-        altitude:   "Altitude Moyenne (m)",
-        pente:      "Pente Moyenne (%)",
-        exposition: "Exposition Moyenne (°)",
-    };
 
-    const colorScaleRendement = d3.scaleSequential([0, 100], d3.interpolateYlGnBu);
+    const colorScaleRendement = d3.scaleSequential([0, metricConfigs.rendement.domainMax], metricConfigs.rendement.interpolator);
     const colorScaleFactor    = d3.scaleSequential(
         [0, d3.max(combinedData, d => d[metric]) || 100],
         metricConfig.interpolator
@@ -914,17 +1029,13 @@ function renderImpactDashboard() {
         const info = f.properties.info;
         if (!info) return `<strong>${f.properties.nom}</strong><br><em>Données indisponibles</em>`;
         const metricValue = metric === 'exposition' 
-            ? Math.round(info[metric]) + '° (' + expositionToCardinal(info[metric]) + ')'
-            : metric === 'altitude'
-            ? Math.round(info[metric]) + ' m'
-            : metric === 'pente'
-            ? info[metric].toFixed(1) + '%'
-            : Math.round(info[metric]) + metricConfig.unit;
+            ? metricConfig.formatValue(info[metric], true)
+            : metricConfig.formatValue(info[metric]);
         return `
             <strong>${info.nom}</strong>
             <hr style="margin:4px 0;border:none;border-top:1px solid #ddd;">
-            Rendement : <strong>${Math.round(info.rendement)} hl/ha</strong><br>
-            ${metric === 'soleil' ? 'Ensoleillement' : metric === 'altitude' ? 'Altitude' : metric === 'pente' ? 'Pente' : 'Exposition'} : <strong>${metricValue}</strong><br>
+            Rendement : <strong>${metricConfigs.rendement.formatValue(info.rendement)}</strong><br>
+            ${metricConfig.label} : <strong>${metricValue}</strong><br>
             Surface : <strong>${Math.round(info.surface).toLocaleString()} ha</strong>
         `;
     };
@@ -946,7 +1057,7 @@ function renderImpactDashboard() {
     const rendementMapContainer = document.createElement("div");
     rendementMapContainer.style.cssText = "flex:1;min-width:0;display:flex;flex-direction:column;";
     const rendementTitle = document.createElement("h4");
-    rendementTitle.textContent = "Rendement Viticole";
+    rendementTitle.textContent = metricConfigs.rendement.axisLabel;
     rendementTitle.style.cssText = "text-align:center;color:#555;margin:0 0 5px 0;font-size:0.95em;";
     rendementMapContainer.appendChild(rendementTitle);
     rendementMapContainer.appendChild(buildChoroplethMap(
@@ -958,8 +1069,8 @@ function renderImpactDashboard() {
         reducedScale
     ));
     appendMapLegend(rendementMapContainer, colorScaleRendement,
-        [0, d3.max(combinedData, d => d.rendement) || 100],
-        "Rendement (hl/ha)", d => Math.round(d) + " hl/ha");
+        [0, d3.max(combinedData, d => d.rendement) || metricConfigs.rendement.domainMax],
+        metricConfigs.rendement.axisLabel, metricConfigs.rendement.formatLegendTick);
 
     // Map 2: Factor
     const geojsonF = JSON.parse(JSON.stringify(departments));
@@ -985,6 +1096,11 @@ function renderImpactDashboard() {
             unifiedTooltip,
             reducedScale
         ));
+        const legend = document.createElement("div");
+        legend.style.cssText = "font-size:11px;color:#555;margin-top:6px;";
+        legend.innerHTML = "<strong>Légende :</strong> chaque flèche indique l'exposition moyenne des vignes du département";
+        factorMapContainer.appendChild(legend);
+
     } else {
         factorMapContainer.appendChild(buildChoroplethMap(
             geojsonF.features,
@@ -996,11 +1112,11 @@ function renderImpactDashboard() {
         ));
         appendMapLegend(factorMapContainer, colorScaleFactor,
             [0, d3.max(combinedData, d => d[metric]) || 100],
-            metricConfig.label + metricConfig.unit, d => Math.round(d) + metricConfig.unit);
+            metricConfig.axisLabel, metricConfig.formatLegendTick);
     }
 
     // Fact box
-    const summaryBox = buildImpactFactBox(codeSelection, combinedData, metric, metricConfigs);
+    const summaryBox = buildImpactFactBox(codeSelection, combinedData, metric);
 
     mapsContainer.appendChild(rendementMapContainer);
     mapsContainer.appendChild(factorMapContainer);
@@ -1075,7 +1191,7 @@ function renderImpactDashboard() {
         const slope = d3.sum(combinedData, d => (d[metric] - mx) * (d.rendement - my))
                     / d3.sum(combinedData, d => (d[metric] - mx) ** 2);
 
-        const unitCfg = { soleil: "h/an", altitude: "m", pente: "%" }[metric];
+        const unitCfg = metricConfig.unit;
         const nounCfg = { soleil: "d'ensoleillement", altitude: "d'altitude", pente: "de pente" }[metric];
         const effectSlope = metric === 'pente'
             ? Math.abs(slope).toFixed(2)
@@ -1100,8 +1216,8 @@ function renderImpactDashboard() {
             width, height: heightPlot,
             marginLeft: 50, marginTop: 30, grid: true,
             style: { background: "#fafafa", padding: "10px", borderRadius: "8px" },
-            x: { label: labels[metric] + " →" },
-            y: { label: "↑ Rendement (hl/ha)", domain: [0, 150] },
+            x: { label: metricConfig.axisLabel + " →" },
+            y: { label: `↑ ${metricConfigs.rendement.axisLabel}`, domain: [0, 150] },
             marks: [
                 ...thresholdMarks,
                 Plot.linearRegressionY(combinedData, {
@@ -1114,7 +1230,7 @@ function renderImpactDashboard() {
                     stroke: "#333",
                     strokeWidth: d => d.code === codeSelection ? 3 : 1,
                     r: d => Math.sqrt(d.surface) / 2,
-                    title: d => `${d.nom}\n${labels[metric]} : ${Math.round(d[metric])}\nRendement : ${Math.round(d.rendement)} hl/ha\nSurface : ${Math.round(d.surface).toLocaleString()} ha`
+                    title: d => `${d.nom}\n${metricConfig.label} : ${metricConfig.formatValue(d[metric])}\nRendement : ${metricConfigs.rendement.formatValue(d.rendement)}\nSurface : ${Math.round(d.surface).toLocaleString()} ha`
                 }),
                 Plot.text(combinedData, {
                     x: metric, y: "rendement", text: "code", dy: -10,
@@ -1154,7 +1270,7 @@ function renderImpactDashboard() {
             <div style="margin-top:8px;font-size:12px;color:#888;">
                 <strong>Seuils de référence :</strong>
                 ${thresholds.map(t =>
-                    `<span style="color:${t.color};margin-right:12px;">▬ ${t.label} (${Math.round(t.value)} ${metricConfig.unit.trim()})</span>`
+                    `<span style="color:${t.color};margin-right:12px;">▬ ${t.label} (${Math.round(t.value)} ${metricConfig.unit})</span>`
                 ).join('')}
             </div>` : ''}
         `;
@@ -1183,7 +1299,7 @@ function expositionToCardinalGroup(deg) {
 
 
 // ─── Impact fact box ──────────────────────────────────────────────────────────
-function buildImpactFactBox(codeSelection, combinedData, activeMetric, metricConfigs) {
+function buildImpactFactBox(codeSelection, combinedData, activeMetric) {
     const box = document.createElement("div");
     box.style.cssText = `
         flex:0 0 250px;
@@ -1210,12 +1326,12 @@ function buildImpactFactBox(codeSelection, combinedData, activeMetric, metricCon
 
     // Build rank for each metric
     const metrics = [
-        { key: 'rendement', label: 'Rendement',      unit: 'hl/ha', fmt: v => Math.round(v) + ' hl/ha',  color: '#1976d2' },
-        { key: 'soleil',    label: 'Ensoleillement', unit: 'h/an',  fmt: v => Math.round(v) + ' h/an',    color: '#f39c12' },
-        { key: 'altitude',  label: 'Altitude',       unit: 'm',     fmt: v => Math.round(v) + ' m',        color: '#5d7a8a' },
-        { key: 'pente',     label: 'Pente',          unit: '%',     fmt: v => v.toFixed(1) + '%',          color: '#c0392b' },
-        { key: 'exposition',label: 'Exposition',     unit: '°',     fmt: v => Math.round(v) + '° (' + expositionToCardinal(v) + ')', color: '#8e6b3e' },
-        { key: 'surface',   label: 'Surface viticole', unit: 'ha',  fmt: v => Math.round(v).toLocaleString() + ' ha', color: '#27ae60' },
+        { key: 'rendement', label: metricConfigs.rendement.label, fmt: v => metricConfigs.rendement.formatValue(v), color: metricConfigs.rendement.accentColor },
+        { key: 'soleil',    label: metricConfigs.soleil.label,    fmt: v => metricConfigs.soleil.formatValue(v),    color: metricConfigs.soleil.accentColor },
+        { key: 'altitude',  label: metricConfigs.altitude.label,  fmt: v => metricConfigs.altitude.formatValue(v),  color: metricConfigs.altitude.accentColor },
+        { key: 'pente',     label: metricConfigs.pente.label,     fmt: v => metricConfigs.pente.formatValue(v),     color: metricConfigs.pente.accentColor },
+        { key: 'exposition',label: metricConfigs.exposition.label,fmt: v => metricConfigs.exposition.formatValue(v, true), color: metricConfigs.exposition.accentColor },
+        { key: 'surface',   label: 'Surface viticole', fmt: v => Math.round(v).toLocaleString() + ' ha', color: '#27ae60' },
     ];
 
     const rankOf = (key) => {
@@ -1312,7 +1428,7 @@ function renderSyntheseDashboard() {
     };
 
     // ── Helper: build one card ──
-    function buildSyntheseCard(cardTitle, mapFeatures, colorFn, colorScale, legendDomain, legendLabel, legendFmt) {
+    function buildSyntheseCard(cardTitle, mapFeatures, colorFn, colorScale, legendDomain, legendLabel, legendFmt, options = {}) {
         const card = document.createElement("div");
         card.style.cssText = `
             background:#fff;border:1px solid #ddd;border-radius:8px;
@@ -1325,17 +1441,23 @@ function renderSyntheseDashboard() {
         titleEl.style.cssText = "font-weight:bold;font-size:13px;color:#5c131e;border-bottom:1px solid #f0e0e0;padding-bottom:6px;";
         card.appendChild(titleEl);
 
-        const mapEl = buildChoroplethMap(
-            mapFeatures, colorFn, unifiedTooltip,
-            W, H, codeSelection,
-            code => setDepartement(code),
-            1800
-        );
+        const mapEl = options.mapBuilder
+            ? options.mapBuilder(mapFeatures)
+            : buildChoroplethMap(
+                mapFeatures, colorFn, unifiedTooltip,
+                W, H, codeSelection,
+                code => setDepartement(code),
+                1800
+            );
         card.appendChild(mapEl);
 
-        const legendWrapper = document.createElement("div");
-        appendMapLegend(legendWrapper, colorScale, legendDomain, legendLabel, legendFmt);
-        card.appendChild(legendWrapper);
+        if (options.legendBuilder) {
+            card.appendChild(options.legendBuilder());
+        } else {
+            const legendWrapper = document.createElement("div");
+            appendMapLegend(legendWrapper, colorScale, legendDomain, legendLabel, legendFmt);
+            card.appendChild(legendWrapper);
+        }
 
         return card;
     }
@@ -1369,8 +1491,8 @@ function renderSyntheseDashboard() {
         return { code, nom_dept: d.nom_dept, rendement };
     }).filter(d => d.rendement > 0);
 
-    const maxRend   = d3.max(rendData, d => d.rendement) || 100;
-    const colorRend = d3.scaleSequential([0, maxRend], d3.interpolateYlGnBu);
+    const maxRend   = d3.max(rendData, d => d.rendement) || metricConfigs.rendement.domainMax;
+    const colorRend = d3.scaleSequential([0, maxRend], metricConfigs.rendement.interpolator);
 
     const geojsonRend = JSON.parse(JSON.stringify(departments));
     geojsonRend.features.forEach(f => {
@@ -1379,16 +1501,16 @@ function renderSyntheseDashboard() {
     });
 
     const cardRend = buildSyntheseCard(
-        "Rendement",
+        metricConfigs.rendement.cardTitle,
         geojsonRend.features,
         d => d.properties.value > 0 ? colorRend(d.properties.value) : "#eee",
-        colorRend, [0, maxRend], "Rendement (hl/ha)",
-        d => Math.round(d) + " hl/ha"
+        colorRend, [0, maxRend], metricConfigs.rendement.axisLabel,
+        metricConfigs.rendement.formatLegendTick
     );
 
     // ── 3. Ensoleillement ──
     const maxSoleil   = d3.max(dataSoleil, d => d.heures_soleil) || 3000;
-    const colorSoleil = d3.scaleSequential([0, maxSoleil], d3.interpolateYlOrRd);
+    const colorSoleil = d3.scaleSequential([0, maxSoleil], metricConfigs.soleil.interpolator);
 
     const geojsonSoleil = JSON.parse(JSON.stringify(departments));
     geojsonSoleil.features.forEach(f => {
@@ -1397,16 +1519,16 @@ function renderSyntheseDashboard() {
     });
 
     const cardSoleil = buildSyntheseCard(
-        "Ensoleillement",
+        metricConfigs.soleil.cardTitle,
         geojsonSoleil.features,
         d => d.properties.value > 0 ? colorSoleil(d.properties.value) : "#eee",
-        colorSoleil, [0, maxSoleil], "Ensoleillement (h/an)",
-        d => Math.round(d) + "h"
+        colorSoleil, [0, maxSoleil], metricConfigs.soleil.axisLabel,
+        metricConfigs.soleil.formatLegendTick
     );
 
     // ── 4. Altitude ──
     const maxAlt   = d3.max(dataTopo, d => d.altitude) || 500;
-    const colorAlt = d3.scaleSequential([0, maxAlt], d3.interpolateGnBu);
+    const colorAlt = d3.scaleSequential([0, maxAlt], metricConfigs.altitude.interpolator);
 
     const geojsonAlt = JSON.parse(JSON.stringify(departments));
     geojsonAlt.features.forEach(f => {
@@ -1415,16 +1537,16 @@ function renderSyntheseDashboard() {
     });
 
     const cardAlt = buildSyntheseCard(
-        "Altitude moyenne",
+        metricConfigs.altitude.cardTitle,
         geojsonAlt.features,
         d => d.properties.value > 0 ? colorAlt(d.properties.value) : "#eee",
-        colorAlt, [0, maxAlt], "Altitude (m)",
-        d => Math.round(d) + "m"
+        colorAlt, [0, maxAlt], metricConfigs.altitude.axisLabel,
+        metricConfigs.altitude.formatLegendTick
     );
 
     // ── 5. Pente ──
-    const maxPente   = d3.max(dataTopo, d => d.pente) || 15;
-    const colorPente = d3.scaleSequential([0, maxPente], d3.interpolateReds);
+    const maxPente   = d3.max(dataTopo, d => d.pente) || metricConfigs.pente.domainMax;
+    const colorPente = d3.scaleSequential([0, maxPente], metricConfigs.pente.interpolator);
 
     const geojsonPente = JSON.parse(JSON.stringify(departments));
     geojsonPente.features.forEach(f => {
@@ -1433,16 +1555,16 @@ function renderSyntheseDashboard() {
     });
 
     const cardPente = buildSyntheseCard(
-        "Pente moyenne",
+        metricConfigs.pente.cardTitle,
         geojsonPente.features,
         d => d.properties.value > 0 ? colorPente(d.properties.value) : "#eee",
-        colorPente, [0, maxPente], "Pente (%)",
-        d => d.toFixed(1) + "%"
+        colorPente, [0, maxPente], metricConfigs.pente.axisLabel,
+        metricConfigs.pente.formatLegendTick
     );
 
     // ── 6. Exposition ──
     const maxExpo   = 360;
-    const colorExpo = d3.scaleSequential([0, maxExpo], d3.interpolateYlOrBr);
+    const colorExpo = d3.scaleSequential([0, maxExpo], metricConfigs.exposition.interpolator);
 
     const geojsonExpo = JSON.parse(JSON.stringify(departments));
     geojsonExpo.features.forEach(f => {
@@ -1451,11 +1573,28 @@ function renderSyntheseDashboard() {
     });
 
     const cardExpo = buildSyntheseCard(
-        "Exposition moyenne",
+        metricConfigs.exposition.cardTitle,
         geojsonExpo.features,
         d => d.properties.value > 0 ? colorExpo(d.properties.value) : "#eee",
-        colorExpo, [0, maxExpo], "Exposition (°)",
-        d => Math.round(d) + "°"
+        colorExpo, [0, maxExpo], metricConfigs.exposition.axisLabel,
+        metricConfigs.exposition.formatLegendTick,
+        {
+            mapBuilder: (features) => buildExpositionMap(
+                features,
+                dataTopo,
+                W,
+                H,
+                codeSelection,
+                unifiedTooltip,
+                1800
+            ),
+            legendBuilder: () => {
+                const legend = document.createElement("div");
+                legend.style.cssText = "font-size:11px;color:#555;margin-top:6px;";
+                legend.innerHTML = "<strong>Légende :</strong> chaque flèche indique l'exposition moyenne des vignes du département";
+                return legend;
+            }
+        }
     );
 
     // ── Grid ──
@@ -1468,11 +1607,12 @@ function renderSyntheseDashboard() {
     `;
 
     grid.appendChild(cardProd);
-    grid.appendChild(cardRend);
-    grid.appendChild(cardSoleil);
     grid.appendChild(cardAlt);
+    grid.appendChild(cardSoleil);
+    grid.appendChild(cardRend);
     grid.appendChild(cardPente);
     grid.appendChild(cardExpo);
+    
 
     container.appendChild(grid);
 }
@@ -1528,7 +1668,6 @@ function buildFactBox(codeSelection, data, metric, colorScale, unit, formatFn, a
         <div style="display:flex;align-items:center;gap:8px;">
             <div style="width:12px;height:12px;border-radius:50%;background:${valColor};flex-shrink:0;border:1px solid #ccc;"></div>
             <span style="font-size:20px;font-weight:bold;">${formatFn(d)}</span>
-            <span style="font-size:11px;color:#888;">${unit}</span>
         </div>
         <div style="background:#e9ecef;border-radius:4px;padding:4px 8px;font-size:12px;">
             Classé <strong>${rank}<sup>e</sup></strong> / ${total} départements
@@ -1537,8 +1676,8 @@ function buildFactBox(codeSelection, data, metric, colorScale, unit, formatFn, a
         <div style="font-size:11px;color:#666;border-top:1px dashed #ddd;padding-top:6px;">
             <div style="font-weight:600;margin-bottom:3px;">Principales AOP :</div>
             <ul style="margin:0;padding-left:14px;line-height:1.6;">
-                ${aopList.slice(0, 4).map(a => `<li>${a}</li>`).join('')}
-                ${aopList.length > 4 ? `<li style="color:#bbb;font-style:italic;">+ ${aopList.length - 4} autres</li>` : ''}
+                ${aopList.slice(0, 7).map(a => `<li>${a}</li>`).join('')}
+                ${aopList.length > 7 ? `<li style="color:#bbb;font-style:italic;">+ ${aopList.length - 7} autres</li>` : ''}
             </ul>
         </div>` : '<div style="font-size:11px;color:#bbb;font-style:italic;">Aucune AOP répertoriée</div>'}
     `;
