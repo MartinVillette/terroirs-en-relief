@@ -166,7 +166,7 @@ footer {
     max-width: 1400px;
     margin: 0 auto;
     display: flex;
-    justify-content: space-between;
+    justify-content: center;
     align-items: center;
     gap: 40px;
 }
@@ -175,6 +175,8 @@ footer {
     display: flex;
     align-items: center;
     gap: 14px;
+    flex: 1;
+    justify-content: flex-start;
 }
 
 .footer-logo img {
@@ -196,10 +198,14 @@ footer {
 
 .footer-center {
     text-align: center;
+    flex: 1;
+    justify-content: center;
 }
 
 .footer-right {
     text-align: right;
+    flex: 1;
+    justify-content: flex-end;
 }
 
 .footer-label {
