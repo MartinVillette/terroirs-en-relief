@@ -3,101 +3,125 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard Production de Vins 2024</title>
-    <script src="https://cdn.jsdelivr.net/npm/d3@7"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@observablehq/plot@0.6"></script>
+    <title>Terroirs en relief - Accueil</title>
     <link rel="stylesheet" href="css/style.css">
+    <style>
+        h3 {
+            color: #666;
+            margin-top: 25px;
+            margin-bottom: 10px;
+        }
+        p {
+            color: #444;
+            line-height: 1.8;
+            margin-bottom: 14px;
+        }
+        section {
+            margin-bottom: 40px;
+        }
+        section:not(:first-child) {
+            border-top: 1px solid #C5A059;
+            padding-top: 20px;
+        }
+        ul {
+            color: #444;
+            line-height: 1.8;
+            margin-left: 30px;
+        }
+        li {
+            margin-bottom: 8px;
+        }
+        .cta-button {
+            display: inline-block;
+            background: linear-gradient(135deg, #4A0E17 0%, #5c131e 100%);
+            color: white;
+            padding: 15px 35px;
+            font-size: 1.1em;
+            font-weight: 600;
+            text-decoration: none;
+            border-radius: 50px;
+            margin-top: 20px;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(139, 69, 19, 0.3);
+        }
+        .cta-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(139, 69, 19, 0.4);
+            background: linear-gradient(135deg, #5c131e 0%, #4A0E17 100%);
+        }
+    </style>
 </head>
 <body>
     <header>
         <div class="nav-links">
-            <img src="assets/images/logo.png" alt="">
-            <a href="index.html" id="nav-focused">Dashboard</a>
+            <a href="index.html"><img src="assets/images/logo.png" alt="Terroirs en relief"></a>
+            <a href="dashboard.html">Dashboard</a>
             <a href="methodology.html">Méthodologie</a>
             <a href="exploration.html">Explorer les données</a>
         </div>
     </header>
 
     <div class="container">
-        <h1>
-            Dashboard Vins & Géographie - France 2024
-            <select id="wineTypeGlobal" style="margin-left:20px;padding:6px 12px;border:1px solid #ddd;border-radius:4px;font-size:14px;cursor:pointer;vertical-align:middle;">
-                <option value="total_aop">Production Totale AOP</option>
-                <option value="aop_rouge">Vin Rouge AOP</option>
-                <option value="aop_blanc">Vin Blanc AOP</option>
-                <option value="aop_rose">Vin Rosé AOP</option>
-            </select>
-        </h1>
+        <h1>Terroirs en relief</h1>
+        <p style="color: #888; font-size: 1.1em; margin-bottom: 30px; font-style: italic;">TOPOVIN - Analyse topo-météorologique du vignoble français</p>
 
-        <!-- Tab navigation -->
-        <div class="tab-nav">
-            <button class="tab-btn active" data-tab="production">Production</button>
-            <button class="tab-btn" data-tab="caracteristiques">Caractéristiques</button>
-            <button class="tab-btn" data-tab="impact">Impact</button>
-            <button class="tab-btn" data-tab="synthese">Vue Synthèse</button>
-        </div>
+        <section>
+            <h2>Présentation</h2>
+            <p>
+                Ce projet explore l'influence de la topographie et de la météorologie sur la production viticole AOP en France. 
+                À travers des visualisations interactives, nous analysons comment l'ensoleillement, la pente, l'altitude et 
+                l'exposition des parcelles viticoles se croisent avec les données de production et de rendement par département.
+            </p>
+        </section>
 
-        <!-- Production -->
-        <div class="tab-panel active" id="tab-production">
-            <div class="controls">
-                <label for="prodType">Afficher :</label>
-                <select id="prodType">
-                    <option value="production">Volume de production</option>
-                    <option value="rendement">Rendement</option>
-                </select>
-            </div>
-            <div id="production-dashboard" class="dashboard-section">
-                <div class="loading">Chargement des données de production...</div>
-            </div>
-        </div>
+        <section>
+            <h2>Résultats</h2>
+            <p>
+                Il n'est pas évident d'identifier des corrélations évidentes entre les facteurs topographiques ou 
+                météorologiques et les volumes de production AOP. Néanmoins, ces visualisations croisées permettent de dégager quelques tendances générales :
+            </p>
+            <ul>
+                <li>Les parcelles viticoles productives sont en majorités situées dans des zones de plaines ou de coteaux, avec des altitudes et des pentes peu élevées (0-300m et 0-6°)</li>
+                <li>La majorité des parcelles sont orientées autour du sud pour une meilleure exposition au soleil.</li>
+                <li>Un ensoleillement trop élevé semble avoir un impact négatif sur la productivité. Les meilleurs rendements sont atteints pour des zones d'ensoleillement modéré (1600-2100h/an)</li>
+            </ul>
+            <p>
+                Si la géographie et la météorologie ne dictent pas directement la productivité des parcelles viticoles, elles restent 
+                determinantes pour la qualité et la typicité des vins AOP français.
+                Evidemment, la productivité dépend en grande partie des surfaces cultivées, des pratiques culturales, des réglementations AOP et du savoir-faire local historique, qui ne sont pas pris en compte dans ce projet.
+            </p>
+        </section>
 
-        <!-- Caractéristiques -->
-        <div class="tab-panel" id="tab-caracteristiques">
-            <div class="controls">
-                <label for="caracType">Caractéristique :</label>
-                <select id="caracType">
-                    <option value="ensoleillement">Ensoleillement</option>
-                    <option value="pente">Pente</option>
-                    <option value="altitude">Altitude</option>
-                    <option value="orientation">Exposition</option>
-                </select>
-            </div>
-            <div id="caracteristiques-dashboard" class="dashboard-section">
-                <div class="loading">Chargement des données...</div>
-            </div>
-        </div>
+        <section>
+            <h2>Contenu du site</h2>
+            <h3>Dashboard</h3>
+            <p>
+                Visualisations interactives de la production viticole 2024 organisées en quatre onglets : Production (volumes et rendements), 
+                Caractéristiques (ensoleillement, pente, altitude, exposition), Impact (corrélations) et Synthèse.
+            </p>
 
-        <!-- Impact -->
-        <div class="tab-panel" id="tab-impact">
-            <div class="controls">
-                <label for="impactFactor">Facteur d'analyse :</label>
-                <select id="impactFactor">
-                    <option value="soleil">Ensoleillement</option>
-                    <option value="pente">Pente</option>
-                    <option value="altitude">Altitude</option>
-                    <option value="exposition">Exposition</option>
-                </select>
-            </div>
-            <div id="impact-dashboard" class="dashboard-section">
-                <div class="loading">Chargement de l'analyse d'impact...</div>
-            </div>
-        </div>
+            <h3>Méthodologie</h3>
+            <p>
+                Documentation des sources de données (RPG, AOC, production, ensoleillement), techniques de traitement, approches de visualisation et limites du projet. 
+            </p>
 
-        <!-- Synthèse -->
-        <div class="tab-panel" id="tab-synthese">
-            <div id="synthese-dashboard" class="tab-content">
-            </div>
-        </div>
+            <h3>Exploration des données</h3>
+            <p>
+                Interface permettant d'explorer librement les données utilisées dans le projet.
+            </p>
+        </section>
 
-
+        <section style="text-align: center; border: none;">
+            <a href="dashboard.html" class="cta-button">Accéder au Dashboard</a>
+        </section>
     </div>
 
     <footer>
         <div class="footer-content">
             <div class="footer-left">
-                <span class="footer-logo"><img src="assets/images/logo.png" alt=""></span>
+                <span class="footer-logo"><img src="assets/images/logo.png" alt="Terroirs en relief"></span>
                 <div>
-                    <div class="footer-title">Wine Geometry Viz</div>
+                    <div class="footer-title">Terroirs en relief</div>
                     <div class="footer-sub">Visualisation interactive de la viticulture française</div>
                 </div>
             </div>
@@ -117,7 +141,5 @@
             </div>
         </div>
     </footer>
-
-    <script src="js/index.js"></script>
 </body>
 </html>
