@@ -151,17 +151,30 @@ const metricThresholds = {
     soleil: [
     ],
     altitude: [
-        { value: 200, label: "Plaine / Coteau",         color: "#2980b9", dash: "4,4" },
-        { value: 400, label: "Vignes de montagne",       color: "#8e44ad", dash: "6,3" },
+        { value: 200, color: "#27ae60", dash: "4,4" },
+        { value: 400, color: "#2980b9", dash: "6,3" },
     ],
     pente: [
-        { value: 2,  label: "Terrain plat",             color: "#27ae60", dash: "4,4" },
-        { value: 5,  label: "Forte pente (mécanisation difficile)", color: "#e74c3c", dash: "6,3" },
+        { value: 3, color: "#e67e22", dash: "4,4" },
+        { value: 6, color: "#c0392b", dash: "6,3" },
     ],
     exposition: [
         { value: 90,  label: "Est",                     color: "#3498db", dash: "4,4" },
         { value: 180, label: "Sud (optimal)",           color: "#e67e22", dash: "6,3" },
         { value: 270, label: "Ouest",                   color: "#3498db", dash: "4,4" },
+    ],
+};
+
+const metricRangeLabels = {
+    altitude: [
+        { from: 0, to: 200, label: "Plaines", color: "#27ae60" },
+        { from: 200, to: 400, label: "Coteaux", color: "#2980b9" },
+        { from: 400, to: null, label: "Collines / montagnes", color: "#8e44ad" },
+    ],
+    pente: [
+        { from: 0, to: 3, label: "Plateau", color: "#27ae60" },
+        { from: 3, to: 6, label: "Pente moderee", color: "#e67e22" },
+        { from: 6, to: null, label: "Pente forte", color: "#c0392b" },
     ],
 };
 
@@ -1163,7 +1176,7 @@ function renderImpactDashboard() {
         const banner = document.createElement("div");
         banner.style.cssText = `
             display:flex;align-items:flex-start;gap:16px;
-            background:#fff8e1;border:1px solid #ffe082;border-radius:8px;
+            background:#fff;border:1px solid #ddd;border-radius:8px;
             padding:12px 16px;margin-top:16px;font-size:13px;color:#555;
             box-shadow:0 1px 4px rgba(0,0,0,0.06);
         `;
@@ -1171,9 +1184,10 @@ function renderImpactDashboard() {
             <div style="line-height:1.6;">
                 <div style="font-weight:bold;margin-bottom:4px;color:#333;">Variable circulaire — pas de corrélation linéaire</div>
                 L'exposition est un angle (0°-360°) : 1° et 359° sont tous les deux "presque Nord" mais arithmétiquement à 358° d'écart.
-                Un coefficient de Pearson n'a donc pas de sens ici.<br>
+                Un coefficient de correlation n'a donc pas de sens ici.<br>
                 Les vignobles orientés <strong>Sud (SE-SO)</strong> bénéficient d'un ensoleillement maximal dans l'hémisphère nord,
-                mais le rendement brut peut être contrebalancé par d'autres facteurs (cépage, sol, altitude, pratiques culturales).
+                mais le rendement brut ne dépend pas uniquement de cette orientation.<br>
+                Ce sont les vignes d'Alsace exposées à l'Est qui ont ici le meilleur rendement.
             </div>
         `;
 
@@ -1203,14 +1217,34 @@ function renderImpactDashboard() {
 
         // Threshold marks
         const thresholds     = metricThresholds[metric] || [];
-        const thresholdMarks = thresholds.flatMap(t => [
-            Plot.ruleX([t.value], { stroke: t.color, strokeWidth: 1.5, strokeDasharray: t.dash }),
-            Plot.text([{ v: t.value, l: t.label }], {
-                x: "v", y: 145,
-                text: "l",
-                fill: t.color, fontSize: 10, textAnchor: "middle", dy: -6
+        const rangeLabels    = metricRangeLabels[metric] || [];
+        const xMaxForZones   = d3.max(combinedData, d => d[metric]) || metricConfig.domainMax || 100;
+        const thresholdMarks = thresholds.map(t =>
+            Plot.ruleX([t.value], { stroke: t.color, strokeWidth: 1.5, strokeDasharray: t.dash })
+        );
+
+        const zoneLabelData = rangeLabels
+            .map(z => {
+                const zoneEnd = z.to == null ? xMaxForZones : z.to;
+                if (zoneEnd <= z.from) return null;
+                return {
+                    x: z.from + (zoneEnd - z.from) / 2,
+                    label: z.label,
+                    color: z.color || "#555",
+                };
             })
-        ]);
+            .filter(Boolean);
+
+        const zoneLabelMarks = zoneLabelData.length > 0
+            ? [Plot.text(zoneLabelData, {
+                x: "x",
+                y: 136,
+                text: "label",
+                fill: "color",
+                fontSize: 10,
+                textAnchor: "middle"
+            })]
+            : [];
 
         const scatterplot = Plot.plot({
             width, height: heightPlot,
@@ -1220,6 +1254,7 @@ function renderImpactDashboard() {
             y: { label: `↑ ${metricConfigs.rendement.axisLabel}`, domain: [0, 150] },
             marks: [
                 ...thresholdMarks,
+                ...zoneLabelMarks,
                 Plot.linearRegressionY(combinedData, {
                     x: metric, y: "rendement",
                     stroke: "#d32f2f", strokeWidth: 2, opacity: 0.6
@@ -1263,13 +1298,21 @@ function renderImpactDashboard() {
 
         const rText = document.createElement("div");
         rText.style.cssText = "flex:1;line-height:1.6;color:#444;";
+        const rangeSummary = rangeLabels.length > 0
+            ? rangeLabels.map(z => {
+                const rangeText = z.to == null
+                    ? `${z.from}+ ${metricConfig.unit}`
+                    : `${z.from}-${z.to} ${metricConfig.unit}`;
+                return `<span style="margin-right:12px;color:${z.color || '#666'};">▬ ${z.label} (${rangeText})</span>`;
+            }).join("")
+            : "";
         rText.innerHTML = `
             <div style="font-weight:bold;margin-bottom:4px;color:#333;">Interprétation statistique</div>
             <div>${interpretationText}</div>
             ${thresholds.length > 0 ? `
             <div style="margin-top:8px;font-size:12px;color:#888;">
-                <strong>Seuils de référence :</strong>
-                ${thresholds.map(t =>
+                <strong>Zones de référence :</strong>
+                ${rangeSummary || thresholds.map(t =>
                     `<span style="color:${t.color};margin-right:12px;">▬ ${t.label} (${Math.round(t.value)} ${metricConfig.unit})</span>`
                 ).join('')}
             </div>` : ''}
